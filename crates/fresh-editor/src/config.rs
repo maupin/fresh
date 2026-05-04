@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
-
+use std::sync::{Arc, LazyLock, Mutex};
 /// Newtype for theme name that generates proper JSON Schema with enum options
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -583,6 +583,8 @@ pub enum StatusBarElement {
     /// the bottom-left of the status bar as a persistent remote-state entry
     /// point.
     RemoteIndicator,
+    /// Custom token registered by a plugin (format: "plugin_name:token_name")
+    CustomToken(String),
 }
 
 impl TryFrom<String> for StatusBarElement {
@@ -610,7 +612,14 @@ impl TryFrom<String> for StatusBarElement {
             "palette" => Ok(Self::Palette),
             "clock" => Ok(Self::Clock),
             "remote" => Ok(Self::RemoteIndicator),
-            _ => Err(format!("Unknown status bar element: {}", s)),
+            _ => {
+                // Check if it's a custom token (contains ':')
+                if inner.contains(':') {
+                    Ok(Self::CustomToken(inner.to_string()))
+                } else {
+                    Err(format!("Unknown status bar element: {}", s))
+                }
+            }
         }
     }
 }
@@ -634,6 +643,7 @@ impl From<StatusBarElement> for String {
             StatusBarElement::Palette => "{palette}".to_string(),
             StatusBarElement::Clock => "{clock}".to_string(),
             StatusBarElement::RemoteIndicator => "{remote}".to_string(),
+            StatusBarElement::CustomToken(name) => format!("{{{}}}", name),
         }
     }
 }
@@ -736,6 +746,81 @@ impl Default for StatusBarConfig {
             left: default_status_bar_left(),
             right: default_status_bar_right(),
         }
+    }
+}
+
+/// Registry for custom statusbar tokens registered by plugins.
+/// Key format: "plugin_name:token_name" (e.g., "git:branch")
+pub struct CustomStatusBarToken {
+    pub title: String,
+    pub value: Mutex<Option<String>>,
+}
+
+static CUSTOM_STATUS_BAR_TOKENS: LazyLock<Mutex<HashMap<String, Arc<CustomStatusBarToken>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Register a custom statusbar token from a plugin.
+/// Returns error if token name is invalid or already registered.
+pub fn register_status_bar_element(
+    plugin_name: &str,
+    token_name: &str,
+    title: &str,
+) -> Result<(), String> {
+    // Validate inputs are non-empty
+    if plugin_name.is_empty() {
+        return Err("Plugin name cannot be empty".to_string());
+    }
+    if token_name.is_empty() {
+        return Err("Token name cannot be empty".to_string());
+    }
+
+    let key = format!("{}:{}", plugin_name, token_name);
+
+    let token = Arc::new(CustomStatusBarToken {
+        title: title.to_string(),
+        value: Mutex::new(None),
+    });
+
+    let mut tokens = CUSTOM_STATUS_BAR_TOKENS.lock().unwrap();
+    if tokens.contains_key(&key) {
+        return Err(format!("Token '{}' already registered", key));
+    }
+    tokens.insert(key, token);
+    Ok(())
+}
+
+/// Get all registered custom statusbar tokens for Settings UI.
+/// Returns Vec of (value, title) where:
+/// - value is "{plugin:token}" format (stored in config)
+/// - title is the human-readable name shown in Settings UI
+pub fn get_custom_status_bar_tokens() -> Vec<(String, String)> {
+    let tokens = CUSTOM_STATUS_BAR_TOKENS.lock().unwrap();
+    tokens
+        .iter()
+        .map(|(k, t)| (format!("{{{}}}", k), t.title.clone()))
+        .collect()
+}
+
+/// Get the value for a custom token by key.
+pub fn get_custom_status_bar_value(key: &str) -> Option<String> {
+    let token = {
+        let tokens = CUSTOM_STATUS_BAR_TOKENS.lock().unwrap();
+        tokens.get(key).cloned()
+    };
+    token.and_then(|t| t.value.lock().unwrap().clone())
+}
+
+/// Set the value for a custom token (called from plugin dispatch).
+pub fn set_custom_status_bar_value(key: &str, value: String) -> Result<(), String> {
+    let token = {
+        let tokens = CUSTOM_STATUS_BAR_TOKENS.lock().unwrap();
+        tokens.get(key).cloned()
+    };
+    if let Some(token) = token {
+        *token.value.lock().unwrap() = Some(value);
+        Ok(())
+    } else {
+        Err(format!("Token '{}' not found", key))
     }
 }
 

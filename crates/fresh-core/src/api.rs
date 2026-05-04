@@ -1844,6 +1844,16 @@ pub enum PluginCommand {
     /// Register a custom command
     RegisterCommand { command: Command },
 
+    /// Register a custom statusbar token
+    RegisterStatusBarElement {
+        plugin_name: String,
+        token_name: String,
+        title: String,
+    },
+
+    /// Set the value for a custom statusbar token
+    SetStatusBarElementValue { name: String, value: String },
+
     /// Unregister a command by name
     UnregisterCommand { name: String },
 

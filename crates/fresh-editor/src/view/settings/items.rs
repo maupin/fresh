@@ -240,10 +240,24 @@ fn build_dual_list_state(
     current_value: Option<&serde_json::Value>,
     excluded: Vec<String>,
 ) -> DualListState {
-    let all_options: Vec<(String, String)> = options
+    // Start with static schema options (built-in tokens)
+    let mut all_options: Vec<(String, String)> = options
         .iter()
         .map(|o| (o.value.clone(), o.name.clone()))
         .collect();
+
+    // Add runtime options (custom tokens from plugins) if this is status bar config
+    // Check if the schema path contains "status_bar"
+    if schema.path.contains("status_bar") {
+        let custom_tokens = crate::config::get_custom_status_bar_tokens();
+        for (key, display) in custom_tokens {
+            // Only add if not already present in options
+            if !all_options.iter().any(|(v, _)| v == &key) {
+                all_options.push((key, display));
+            }
+        }
+    }
+
     let included = value_as_string_array(current_value, schema.default.as_ref());
     DualListState::new(&schema.name, all_options)
         .with_included(included)

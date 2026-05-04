@@ -757,6 +757,22 @@ impl Editor {
             PluginCommand::RegisterCommand { command } => {
                 self.handle_register_command(command);
             }
+            PluginCommand::RegisterStatusBarElement {
+                plugin_name,
+                token_name,
+                title,
+            } => {
+                if let Err(e) =
+                    crate::config::register_status_bar_element(&plugin_name, &token_name, &title)
+                {
+                    tracing::warn!("Failed to register statusbar element: {}", e);
+                }
+            }
+            PluginCommand::SetStatusBarElementValue { name, value } => {
+                if let Err(e) = crate::config::set_custom_status_bar_value(&name, value) {
+                    tracing::warn!("Failed to set statusbar element value: {}", e);
+                }
+            }
             PluginCommand::UnregisterCommand { name } => {
                 self.handle_unregister_command(name);
             }

@@ -1107,6 +1107,29 @@ impl JsEditorApi {
             .is_ok()
     }
 
+    /// Register a custom statusbar token.
+    /// Token will be named "plugin_name:token_name" where plugin_name is the current plugin.
+    /// Returns true if registration succeeded, false if invalid or already registered.
+    pub fn register_status_bar_element(&self, token_name: String, title: String) -> bool {
+        let plugin_name = self.plugin_name.clone();
+        self.command_sender
+            .send(PluginCommand::RegisterStatusBarElement {
+                plugin_name,
+                token_name,
+                title,
+            })
+            .is_ok()
+    }
+
+    /// Set the value for a previously registered custom statusbar token.
+    /// Token name is "plugin_name:token_name" where plugin_name is the current plugin.
+    pub fn set_status_bar_element_value(&self, token_name: String, value: String) -> bool {
+        let name = format!("{}:{}", self.plugin_name, token_name);
+        self.command_sender
+            .send(PluginCommand::SetStatusBarElementValue { name, value })
+            .is_ok()
+    }
+
     // === Translation ===
 
     /// Translate a string - reads plugin name from __pluginName__ global
