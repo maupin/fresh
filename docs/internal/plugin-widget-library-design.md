@@ -1,8 +1,13 @@
 # Plugin widget library — design proposal
 
-Status: proposal
+Status: proposal (rev 2)
 Author: staff-eng review, branch `claude/plugin-ui-component-library-wO76I`
 Scope: shared UI components for the Fresh plugin runtime
+Criterion: end-state UX, robustness, flexibility. Shipping speed is
+explicitly *not* a constraint; risk-reduction and time-to-merge are
+not optimization targets here. If you are optimizing for those, see
+Appendix A and the parallel proposal on
+`claude/design-plugin-ui-library-pxri8`.
 Related: `docs/internal/UNIFIED_UI_FRAMEWORK_PLAN.md`,
 `docs/internal/unified-hit-test-theme-plan.md`,
 `docs/internal/unified-keybinding-resolution.md`,
@@ -10,6 +15,13 @@ Related: `docs/internal/UNIFIED_UI_FRAMEWORK_PLAN.md`,
 `docs/internal/visual-layout-unification.md`,
 `docs/internal/plugin-usability-review.md`,
 `docs/internal/settings-controls-usability-report.md`
+
+Rev 2 changes vs. rev 1: `Transient` and `Layer` promoted to v1
+widgets; new §3.5 (layered Compositor unifying `Popup`/`Prompt`/
+`showActionPopup`/hover/modals); §6 expanded with Spec-as-first-class
+state (session restore, theme switch, replay, headless render,
+cross-plugin composition); Appendix A engaging the rejected TS-only
+alternative; framing throughout sharpened on UX/robustness/flexibility.
 
 > Note. The brief referenced `lib/text_area.ts` and
 > `docs/internal/search-replace-ux-improvements.md`; neither exists in
@@ -119,9 +131,10 @@ to close a §-item in `plugin-usability-review.md` or
 | `Toolbar` | `git_log.ts`, `audit_mode.ts` | `items: Array<Button \| Separator \| ToggleGroup>` | — | per-item events | today |
 | `HintBar` | every plugin's "?" footer | `entries: Array<{keys, label}>` | — | — | today |
 | `Tabs` / `Group` | `git_log.ts` buffer group, Settings categories | `tabs: Array<{key, title, badge?}>`, `activeKey` | — | `onSelect(key)` | today |
-| `Prompt` (modal input) | `lib/finder.ts`, every confirm | `title`, `body: Widget`, `actions: Button[]` | as Panel | `onAction(key)` | today |
-| `Transient` (key-grouped command menu) | currently absent; needed by `git_log`, `search_replace` | `groups: [{title, entries: [{keys, label, command}]}]` | `chord` state | `onCommand(id)` | next |
-| `Table` (columns, sortable, selectable rows) | `git_log.ts` log, `find_references.ts`, audit | `columns`, `rows`, `sortKey?`, `selectedRowKey?` | scroll, hover, sort | `onSort`, `onSelectRow`, `onActivateRow` | next |
+| `Prompt` (modal input) | `lib/finder.ts`, every confirm | `title`, `body: Widget`, `actions: Button[]` | as Panel | `onAction(key)` | today (built on `Layer`) |
+| `Layer` (anchored or modal compositor layer) | tooltips, popovers, context menus, modals — subsumes today's `Popup`/`Prompt`/`showActionPopup` (see §3.5) | `kind: "tooltip"\|"popover"\|"modal"\|"panel"`, `anchor?: WidgetKey \| Rect`, `body: Spec`, `dismissOn: ["outside-click"\|"escape"\|"blur"\|"hover-out"]` | open?, focus | `onDismiss`, `onAction` | today |
+| `Transient` (key-grouped command menu, Magit shape) | discoverability per `plugin-usability-review.md`; replaces `git_log.ts` toolbar key-hint sprawl and `search_replace.ts` tab-stack key-hint footer | `groups: [{title, entries: [{keys, label, command, enabled?}]}]` | `chord` state | `onCommand(id)`, `onDismiss` | today |
+| `Table` (columns, sortable, selectable rows) | `git_log.ts` log, `find_references.ts`, audit | `columns`, `rows`, `sortKey?`, `selectedRowKey?` | scroll, hover, sort | `onSort`, `onSelectRow`, `onActivateRow` | today |
 | `KeybindingList` | mirror Rust `keybinding_list/` | as Settings | as Settings | `onChange(binding[])` | next |
 | `MapInput` | mirror Rust `map_input/` | as Settings | as Settings | `onChange(map)` | next |
 | `Diagnostic` / `InlineHint` | LSP plugins | `severity`, `message`, `source?` | — | — | next |
@@ -179,6 +192,89 @@ Horizontal scroll is a property of `RawBuffer`, `Table`, and `List`
 content; it is not a layout-level concern. Toolbars set
 `wrap: "never"` and clip; this is consistent with how the Rust
 `view/controls/keybinding_list/` already truncates.
+
+---
+
+## 3.5 Compositor: layered Components
+
+Today the editor has half a dozen overlapping subsystems for "thing
+that paints over content": `Popup` (`crates/fresh-editor/src/view/popup.rs`),
+`Prompt` (`view/prompt.rs`), `showActionPopup` (yet another path),
+the buffer-group panel renderer, hover tooltips, completion popups.
+Each has its own focus stack, dismiss policy, mouse routing, and
+keymap precedence. Plugins that want any of them compose ad-hoc, and
+the rules for which dismisses which on Escape are scattered across
+files.
+
+**Unify them as layers in a single Compositor**, modelled on Helix's
+`Component` trait, adapted for IPC:
+
+```rust
+trait Component {
+    fn render(&mut self, area: Rect, surface: &mut Surface, ctx: &mut Ctx);
+    fn handle_event(&mut self, event: &Event, ctx: &mut Ctx) -> EventResult;
+    fn cursor(&self, area: Rect, ctx: &Ctx) -> (Option<Position>, CursorKind);
+    fn required_size(&mut self, viewport: (u16, u16)) -> Option<(u16, u16)>;
+    fn dismiss_policy(&self) -> DismissPolicy;
+    fn id(&self) -> ComponentId;
+}
+```
+
+The Compositor owns a Z-ordered stack of Components. Events bubble
+front-to-back until one returns `EventResult::Consumed`; the focused
+component is implicitly the topmost layer with `accepts_focus()`. The
+Spec runtime is one Component implementation among many. `Popup`,
+`Prompt`, `showActionPopup`, hover tooltips, and the completion popup
+become other implementations of the same trait — sharing dismiss,
+mouse routing, focus, and accessibility paths.
+
+The plugin-facing surface is a single `mountLayer` IPC:
+
+```ts
+const tooltip = editor.mountLayer({
+  kind: "tooltip",                 // "tooltip" | "popover" | "modal" | "panel"
+  anchor: { widget: "matchTree", row: hoveredRow },
+  body: { kind: "widget", type: "InfoCard", props: { ... } },
+  dismissOn: ["hover-out", "blur"],
+});
+// later: tooltip.dismiss();
+```
+
+UX wins this enables — none of which are reachable in a TS-only design:
+
+- A hover tooltip on a `Tree` row is a child layer, not a Tree-internal
+  feature. *Any* widget can host a tooltip via `mountLayer({ kind:
+  "tooltip", anchor: ..., ... })`. Tooltips do not multiply across
+  widget implementations.
+- A `Button.kind = "danger"` can spawn a confirm modal as `Layer {
+  kind: "modal", body: { type: "Prompt" } }`; the same focus, dismiss,
+  and event routing the rest of the panel uses. There is no separate
+  modal-dialog API.
+- Right-click context menus are `Layer { kind: "popover", body: { type:
+  "List" } }`. Plugins do not re-implement context menus per panel.
+  The `dismissOn: ["outside-click", "escape"]` policy lives once.
+- A `Prompt` mounted from inside a panel is the *same* Component as the
+  top-level command palette (`view/prompt.rs`). One implementation,
+  one keymap, one accessibility story, one set of bug fixes.
+- The completion popup an LSP plugin shows over a buffer is a
+  Component layer. So is the diagnostic hover. They stack and dismiss
+  predictably with respect to each other and to plugin-mounted
+  tooltips, because the dispatcher is one place.
+
+**Files affected.** New `crates/fresh-editor/src/compositor/` with the
+trait, the stack, the dispatcher, and the `mountLayer` IPC binding.
+`view/popup.rs`, `view/prompt.rs`, `view/hover.rs`, and the
+action-popup implementation migrate to be `Component` implementations
+in successive PRs. None of those migrations is plugin-visible; the
+plugin-facing `editor.startPrompt`, `editor.showActionPopup`, etc.
+become thin wrappers that mount a layer.
+
+**Why layers instead of "Popup is special"**: in the current code, a
+`Prompt` mounted while a `Popup` is open has unspecified dismiss order,
+and neither knows about plugin-side panels. A unified compositor makes
+the precedence rules data, not control flow. Ditto the
+`event-dispatch-architecture.md` Phase 2 dispatcher: it becomes the
+Compositor's hit-test, not a parallel system.
 
 ---
 
@@ -315,6 +411,70 @@ Lifecycle alignment with `editor_tick`:
 
 This is the same cadence the imperative API already uses; we are not
 adding a new tick or a new render path.
+
+### Spec as first-class state
+
+The Spec is data: a typed, versioned JSON tree with stable `key`s.
+Treat it as state, not as a transient render-output. That choice
+unlocks five capabilities for free — none of them reachable in a
+TS-only design where the rendered `TextPropertyEntry[]` is the only
+artifact:
+
+1. **Session restore.** Each panel's last-applied Spec, plus the
+   widget-instance state the host owns (cursor offset, expanded keys,
+   scroll, focus, hover), is persisted per workspace. Reopening the
+   panel restores it without plugin involvement. The plugin's only
+   responsibility is to emit a Spec when its model is rebuilt; the
+   library re-mounts the persisted instance state against it by
+   matching `key`s.
+2. **Live theme switching.** When the user changes themes, the host
+   re-renders every active Spec against the new theme. No plugin
+   round-trip; no tearing. (Today every plugin would need to handle a
+   `theme_changed` event and re-emit; in practice none do, so theme
+   switches leave plugin-painted regions stale until the next event
+   forces a re-render.)
+3. **Deterministic replay for bug reports.** A
+   `--record-spec-stream` flag captures every Spec mutation plus
+   every event the host delivered, plus widget-instance state at
+   each tick. Replays reproduce UI bugs without the originating
+   plugin's runtime. Equivalent to a Redux time-travel debugger,
+   essentially free given the Spec already exists.
+4. **Headless rendering.** Specs render to a string buffer and an
+   overlay map without an editor. Snapshot tests for plugin UI become
+   `assert_eq!(render(spec, theme), expected)` — pure functions. The
+   current path (`tests/common/harness.rs:1571` —
+   `EditorTestHarness::screen_to_string()`) requires spawning the
+   editor, driving keys, and screen-scraping; that stays available
+   for end-to-end tests but is not the only option.
+5. **Cross-plugin composition.** A finder plugin can embed another
+   plugin's Spec as a preview: `{ kind: "embed", spec: otherSpec }`.
+   Specs travel as data. The host validates and renders without the
+   originating plugin's runtime being involved (the embedded Spec is
+   read-only — events bounce back to whichever plugin owns the
+   panel).
+
+Robustness implications:
+
+- **Versioning.** `spec.version: 1`. New widget kinds and props arrive
+  without breaking old persisted Specs; the reconciler upgrades
+  silently or reports a single `SpecVersionMismatch` event.
+- **Fault isolation.** A panicking renderer for one widget kind does
+  not kill the panel. The reconciler reports `RenderError` for the
+  offending subtree, paints a placeholder in its rect, and the rest
+  of the panel renders. The plugin gets an event to log.
+- **Spec/instance separation.** A plugin can rebuild its Spec from
+  scratch on every model change without losing focus, cursor
+  position, scroll offset, or partially-typed input. The reconciler
+  matches by `key` and preserves all instance state. This is exactly
+  the property hand-rolled plugins fail to provide today: changing
+  the visible row range in `audit_mode.ts` re-emits the buffer and
+  loses the cursor.
+- **Imperative escape hatch is bounded.** `editor.widget(key).setValue(s)`
+  and `editor.widget(key).focus()` exist for the rare cases where the
+  plugin wants to drive a widget without re-emitting the panel Spec
+  (e.g. paste handling). They are queued through the same
+  `process_async_messages` path; ordering with Spec updates is
+  well-defined (FIFO).
 
 ---
 
@@ -498,20 +658,32 @@ The PR is small enough to land cleanly, exercises the full IPC path
 
 ### Rejected alternatives
 
-- **TS-only library.** Section 1.
+- **TS-only thin helper library** (the parallel proposal on
+  `claude/design-plugin-ui-library-pxri8`). Engaged in detail in
+  Appendix A. Summary: a coherent v1 *if* shipping speed is the
+  binding constraint; the wrong end-state under the criterion stated
+  at the top of this document.
 - **Replace `setVirtualBufferContent` outright.** Forces a flag-day
-  rewrite of 107 plugins. Rejected for backwards compat alone.
+  rewrite. Backwards compat is preserved as an *adoption enabler*,
+  not a goal — `RawBuffer` lets every plugin keep its current
+  renderer until it chooses to migrate.
 - **Imperative widget handles only (no declarative Spec).** Considered.
   Plugins would call
   `editor.createButton({label}).onActivate(...).mount(parent)`. This
   is the React-without-JSX model. Rejected because every plugin would
   re-implement reconciliation by hand: `if (currentLabel != newLabel)
   button.setLabel(newLabel)`. The Spec/reconciler model centralizes
-  this.
+  this. Imperative `widget.setValue/setFocus/dismiss` survive only as
+  bounded escape hatches (§6).
 - **An `iframe`-equivalent (Webview) component.** Rejected on the same
   grounds VS Code itself documents — the security cost dominates the
   flexibility benefit, and we have zero of VS Code's CSP and process
   isolation infrastructure.
+- **Per-subsystem ad-hoc layers** (keep `Popup`/`Prompt`/`showActionPopup`
+  as separate paths, plugins pick whichever fits). Rejected: layering
+  semantics (which dismisses what on Escape, who gets the next mouse
+  click, focus-trap correctness) cannot be made coherent without one
+  authoritative compositor (§3.5).
 
 ### Risks
 
@@ -550,17 +722,144 @@ The PR is small enough to land cleanly, exercises the full IPC path
 
 ## 15. Go / don't go
 
-**Go.** This is a hybrid widget runtime that finishes the job
-`UNIFIED_UI_FRAMEWORK_PLAN.md` started: Rust owns layout, hit-test,
-focus, theming, and widget state; TypeScript plugins emit a
-declarative Spec and consume semantic events; the existing
-`setVirtualBufferContent` and `defineMode` primitives stay so all 107
-plugins keep working unchanged on day one. It grants no new
-capabilities, makes high-contrast and i18n actually consistent,
-unblocks the §4/§11/§14 follow-ups in `search_replace.ts` as concrete
-widget features, and lets the Settings pane and plugin widgets share
-renderers — which is the original motivation for the unification work.
-The smallest first PR (HintBar migration) is small, reversible, and
-exercises the full IPC path; if it doesn't feel right after a week,
-the only thing on the floor is one new module and one HintBar. Land
-it.
+**Go.** Rust-resident widget runtime; declarative TypeScript Spec;
+layered Compositor unifying every overlay subsystem; Spec as
+first-class state with session restore, theme switching, deterministic
+replay, headless rendering, and cross-plugin composition; theming by
+role with central role→key resolution; widget-internal keymaps
+claimed in core before plugin keymaps see the keystroke; one render
+path serves the Settings UI, the file explorer, the prompt, the
+completion popup, and every plugin panel.
+
+Backwards compatibility is preserved — `setVirtualBufferContent`,
+`defineMode`, `Popup`, `Prompt`, `showActionPopup` all keep working
+exactly as they do today, on top of the Compositor instead of
+beside it — but compatibility is treated as an adoption enabler, not
+a design goal. No plugin is forced to migrate; every plugin that
+does, removes hand-rolled hit-test math, byte-offset cursor
+arithmetic, focus enums, and palette guesses, and inherits a
+consistent accessibility, theming, and dismissal story.
+
+The maximalist path. There is a smaller-scoped TS-only alternative
+(Appendix A); it is the right answer to a different question. For
+the question "what should this library *be* in the limit," this is
+the answer.
+
+---
+
+## Appendix A — Rejected: TS-only thin helper library
+
+A parallel proposal exists on `claude/design-plugin-ui-library-pxri8`
+(`docs/internal/plugin-ui-library-design.md`, 1,231 lines) that takes
+the opposite shape: ~800 LOC of TypeScript helpers
+(`Widgets.list`, `Widgets.table`, `Widgets.keyValueForm`,
+`Widgets.checkboxRow`, `Widgets.buttonRow`, `Widgets.textInput`,
+`Widgets.helpFooter`), one `VirtualBufferBuilder` for byte-offset
+bookkeeping, a `TextInputState` + `TextInputRouter` wrapping
+`mode_text_input`, a `FocusRing<T>` cycle helper, and seven new theme
+keys. **Zero new IPC.** Migrates `pkg.ts`, `search_replace.ts`,
+`theme_editor.ts` in ~3 weeks, ~10 person-days.
+
+It is a coherent v1 if shipping speed is the binding constraint. It
+is the wrong end-state. Every advantage in that proposal collapses
+once the criterion is end-state UX, robustness, and flexibility:
+
+| Their advantage | Why it doesn't survive the criterion |
+|---|---|
+| "No new IPC" | Risk reduction, not UX. New IPC is the price of moving widget state into core, which is the precondition for everything below. |
+| "Empirical 3+ plugin gating" | Half-right. Caps `Tree` out of v1 because today only `search_replace` builds one — the brief explicitly named tree expand/collapse as a target widget. The discipline is useful as an *additive filter on speculative widgets*; not as a *cap on the brief's stated requirements*. |
+| "Adoption-failure lesson" (panel-manager exists, no plugin uses it) | Real and worth keeping. But it's an API-ergonomics concern, not a scope concern. The fix is "make the API match how plugins already think" (a `redraw()` that returns a Spec — exactly the shape `dashboard.ts:emit` and `search_replace.ts:render` already have); not "ship less." |
+| "Bounded migration" (~10 person-days) | Irrelevant under this criterion. |
+| "Smaller surface" | The cost — not the benefit — of every UX problem the proposal then defers (mouse routing, tree, accessibility, theme roles, reach). |
+
+Five UX/robustness/flexibility wins the TS-only shape structurally
+cannot reach:
+
+1. **Widget-internal keymap claimed before plugin keymaps see it.**
+   `TextInput` consumes Backspace, arrows, Home, End, IME composition
+   uniformly across every plugin. The TS-only proposal's
+   `TextInputRouter` requires each plugin to register these in its
+   `defineMode` and forward calls to a per-plugin state object. Some
+   plugins will forget. Some will register a slightly different set.
+   Behavior drifts by plugin. Mine handles it once in the Component
+   layer (§4): the host runs the widget keymap before the plugin's
+   `defineMode` bindings are consulted, and only on `Ignored` does the
+   plugin see the keystroke.
+2. **Hit-testing owned by core.** The TS-only proposal's
+   `Widgets.list` returns a `lineToItemIndex` map; plugins wire the
+   lookup themselves. Plugins wire it inconsistently. Hover, drag,
+   double-click, scroll multiply this. Mine is one dispatcher in
+   Rust (§5) that emits semantic events (`onSelect(key)`,
+   `onToggleExpand(key)`, `onHover(key, true|false)`) — the plugin
+   never sees `(buffer_row, buffer_col)`.
+3. **Per-keystroke cost has the right asymptote.** Today's
+   `setVirtualBufferContent` is full delete-all + insert-all + rebuild
+   overlay tree (`virtual_buffers.rs:356–405`). With widget state
+   Rust-side, a keystroke in a `TextInput` mutates Rust state and
+   emits one semantic event back; if the plugin's model doesn't
+   change, no re-render IPC fires at all. The TS-only proposal
+   replaces the whole buffer on every keystroke forever — fine for
+   today's panel sizes, the wrong asymptote for inline-match
+   decoration, large `Tree`s, or a search panel that streams results.
+4. **Theme as roles, not colors.** The TS-only proposal adds 7 theme
+   keys (`button_focused_bg`, `toggle_on_fg`, etc.). Plugins still
+   pick which key to pass to which widget. Same drift, slightly
+   smaller. Theme packs and accessibility variants (high-contrast,
+   color-blind, motion-reduced) only stay consistent when the
+   role→key mapping is centralized in the renderer, not in every
+   plugin's call sites (§7). Mine: plugins pass `kind: "danger"`,
+   never colors.
+5. **Reach across built-in surfaces.** The Rust `view/controls/*`
+   renderers already do button, dropdown, toggle, text_input,
+   text_list, map_input, dual_list, keybinding_list. Under this
+   proposal they paint plugin widgets too — Settings, file explorer,
+   prompts, plugin panels share one render path. The TS-only proposal
+   freezes the split forever (its §2.1 acknowledges and accepts: "8,162
+   LOC of Rust controls… plugins cannot call any of this," and its
+   answer is to build a parallel TS stack that *also* doesn't call any
+   of this). Two render paths, two bug surfaces, two accessibility
+   stories, two theming implementations, forever.
+
+Three further capabilities the TS-only design forecloses:
+
+- **Layered compositor.** No path to unifying `Popup`/`Prompt`/
+  `showActionPopup`/hover/modals/context-menus/completion under one
+  dismiss-and-focus model (§3.5). Each stays its own subsystem;
+  precedence rules stay scattered.
+- **Spec as first-class state.** Session restore, theme switch,
+  deterministic replay, headless rendering, cross-plugin composition
+  (§6, "Spec as first-class state") all require the Spec to *be*
+  state, not transient render-output. The TS-only design has no
+  Spec — its widgets return `TextPropertyEntry[]`, which by the time
+  the host sees it has lost the structural information needed for
+  any of these features.
+- **Fault isolation.** A panicking widget renderer in the TS-only
+  design takes down the panel render. With Rust-side widget kinds,
+  the reconciler can paint a placeholder for the offending subtree
+  and keep going.
+
+Where the TS-only proposal is right and we keep its discipline:
+
+- **Anchor every widget to a named plugin's hand-rolled code.** No
+  speculative widgets. Their `pkg.ts:16-29` literal `TODO: Plugin UI
+  Component Library` is a stronger motivator than the
+  `UNIFIED_UI_FRAMEWORK_PLAN.md` Phase 7-8 generality argument —
+  carry it forward as the v1-gating filter on *which* widgets land
+  in the catalogue.
+- **Don't ship retained widget-handle APIs as the primary model**
+  (`button.setLabel(s)`). That's the panel-manager failure mode
+  they correctly identify. Spec/reconciler is declarative;
+  imperative `widget.setValue` exists only as a bounded escape
+  hatch (§6).
+- **Reuse `mode_text_input` and `defineMode` for the imperative
+  escape hatch.** Their `TextInputRouter` is the right shape for
+  plugins that opt out of widget-mounted text inputs entirely. Keep
+  it as a fallback library, not as the primary path.
+
+**Net.** The TS-only proposal answers "what is the minimum useful help
+in the next three weeks?" cleanly and correctly. It does not answer
+"what should this library be?" Under the criterion stated at the top
+of this document — end-state UX, robustness, flexibility, with shipping
+speed deliberately not a constraint — every one of its compromises
+shows up later as a UX/robustness ceiling that requires undoing the
+API to lift. Build the maximalist version.
