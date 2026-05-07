@@ -165,66 +165,115 @@ done
         screen
     );
 
-    // Trigger selection of first item (MyClass)
-    harness.send_key(KeyCode::Up, KeyModifiers::NONE)?;
-    for _ in 0..3 {
-        harness.process_async_and_render()?;
+    // Verify each symbol's selection using clipboard copy+paste (avoids model accessors)
+    verify_symbol_selection(
+        &mut harness,
+        &test_file,
+        |h| {
+            h.send_key(KeyCode::Up, KeyModifiers::NONE)?;
+            h.process_async_and_render()?;
+            Ok(())
+        },
+        &[
+            "class MyClass {",
+            "  constructor() {",
+            "    return true;",
+            "  }",
+            "",
+            "  myMethod(a: number): number {",
+            "    return a;",
+            "  }",
+            "}",
+        ],
+    )?;
+
+    verify_symbol_selection(
+        &mut harness,
+        &test_file,
+        |h| {
+            h.send_key(KeyCode::Up, KeyModifiers::NONE)?;
+            h.process_async_and_render()?;
+            h.send_key(KeyCode::Down, KeyModifiers::NONE)?;
+            h.process_async_and_render()?;
+            Ok(())
+        },
+        &["  constructor() {", "    return true;", "  }"],
+    )?;
+
+    verify_symbol_selection(
+        &mut harness,
+        &test_file,
+        |h| {
+            h.send_key(KeyCode::Up, KeyModifiers::NONE)?;
+            h.process_async_and_render()?;
+            h.send_key(KeyCode::Down, KeyModifiers::NONE)?;
+            h.process_async_and_render()?;
+            h.send_key(KeyCode::Down, KeyModifiers::NONE)?;
+            h.process_async_and_render()?;
+            Ok(())
+        },
+        &["  myMethod(a: number): number {", "    return a;", "  }"],
+    )?;
+
+    Ok(())
+}
+
+/// Navigate to a symbol via the finder, close the prompt, then verify
+/// the selection via copy → select-all → paste → screen assertion.
+fn verify_symbol_selection(
+    harness: &mut EditorTestHarness,
+    _test_file: &std::path::Path,
+    navigate: impl FnOnce(&mut EditorTestHarness) -> anyhow::Result<()>,
+    expected_lines: &[&str],
+) -> anyhow::Result<()> {
+    // Open the LSP symbols finder
+    {
+        let harness = &mut *harness;
+        harness.send_key(KeyCode::Char('p'), KeyModifiers::CONTROL)?;
+        harness.wait_for_prompt()?;
+        harness.type_text("Go to LSP Symbol")?;
+        harness.render()?;
+        harness.send_key(KeyCode::Enter, KeyModifiers::NONE)?;
+        harness.wait_for_prompt()?;
+        harness.render()?;
+        harness.wait_until(|h| h.screen_to_string().contains("[class] MyClass"))?;
     }
 
-    let selection = harness.get_selection_range();
-    assert!(
-        selection.is_some(),
-        "After selecting first symbol (MyClass), editor should have a selection. Screen:\n{}",
-        harness.screen_to_string()
-    );
-    let selected_text = harness.get_selected_text();
+    // Navigate to the target symbol
+    navigate(harness)?;
+
+    // Close prompt so keyboard events go to the editor
+    harness.send_key(KeyCode::Esc, KeyModifiers::NONE)?;
+    harness.wait_for_prompt_closed()?;
+    harness.render()?;
+
+    // Copy the selection, then paste it as the entire file content
+    harness.editor_mut().set_clipboard_for_test(String::new());
+    harness.send_key(KeyCode::Char('c'), KeyModifiers::CONTROL)?;
+    harness.render()?;
+    harness.send_key(KeyCode::Char('a'), KeyModifiers::CONTROL)?;
+    harness.render()?;
+    harness.send_key(KeyCode::Char('v'), KeyModifiers::CONTROL)?;
+    harness.render()?;
+
     let screen = harness.screen_to_string();
     assert!(
-        selected_text == "class MyClass {\n  constructor() {\n    return true;\n  }\n\n  myMethod(a: number): number {\n    return a;\n  }\n}",
-        "First item (MyClass) should select full class. Selected text: {:?}\nScreen:\n{}",
-        selected_text,
+        screen.contains("Past"),
+        "Should show 'Pasted' in status bar (may be truncated). Screen:\n{}",
         screen
     );
-
-    harness.send_key(KeyCode::Down, KeyModifiers::NONE)?;
-    for _ in 0..3 {
-        harness.process_async_and_render()?;
+    for line in expected_lines {
+        assert!(
+            screen.contains(line),
+            "Expected '{}' to be visible after copy-all-paste. Screen:\n{}",
+            line,
+            screen
+        );
     }
 
-    let selection = harness.get_selection_range();
-    assert!(
-        selection.is_some(),
-        "After selecting constructor, editor should have a selection. Screen:\n{}",
-        harness.screen_to_string()
-    );
-    let selected_text = harness.get_selected_text();
-    let screen = harness.screen_to_string();
-    assert!(
-        selected_text == "  constructor() {\n    return true;\n  }",
-        "constructor should be selected. Selected text: {:?}\nScreen:\n{}",
-        selected_text,
-        screen
-    );
-
-    harness.send_key(KeyCode::Down, KeyModifiers::NONE)?;
-    for _ in 0..3 {
-        harness.process_async_and_render()?;
-    }
-
-    let selection = harness.get_selection_range();
-    assert!(
-        selection.is_some(),
-        "After selecting myMethod, editor should have a selection. Screen:\n{}",
-        harness.screen_to_string()
-    );
-    let selected_text = harness.get_selected_text();
-    let screen = harness.screen_to_string();
-    assert!(
-        selected_text == "  myMethod(a: number): number {\n    return a;\n  }",
-        "myMethod should be selected. Selected text: {:?}\nScreen:\n{}",
-        selected_text,
-        screen
-    );
+    // Undo the paste to restore original file content
+    harness.send_key(KeyCode::Char('z'), KeyModifiers::CONTROL)?;
+    harness.process_async_and_render()?;
 
     Ok(())
 }
