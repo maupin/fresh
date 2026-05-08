@@ -134,6 +134,7 @@ fn get_type_decl(type_name: &str) -> Option<String> {
         "HintEntry" => Some(fresh_core::api::HintEntry::decl(&cfg)),
         "ButtonKind" => Some(fresh_core::api::ButtonKind::decl(&cfg)),
         "WidgetAction" => Some(fresh_core::api::WidgetAction::decl(&cfg)),
+        "WidgetMutation" => Some(fresh_core::api::WidgetMutation::decl(&cfg)),
 
         // Authority — payload schema for `editor.setAuthority(...)`.
         // Hand-written because the authoritative struct lives in
@@ -250,10 +251,11 @@ const DEPENDENCY_TYPES: &[&str] = &[
     "PluginAnimationEdge",            // Used by PluginAnimationKind
     "PluginAnimationKind",            // Used by animateArea/animateVirtualBuffer
     // Widget library types (see docs/internal/plugin-widget-library-design.md)
-    "HintEntry",    // Used by WidgetSpec::HintBar
-    "ButtonKind",   // Used by WidgetSpec::Button.intent
-    "WidgetSpec",   // Used by mountWidgetPanel/updateWidgetPanel
-    "WidgetAction", // Used by widgetCommand
+    "HintEntry",      // Used by WidgetSpec::HintBar
+    "ButtonKind",     // Used by WidgetSpec::Button.intent
+    "WidgetSpec",     // Used by mountWidgetPanel/updateWidgetPanel
+    "WidgetAction",   // Used by widgetCommand
+    "WidgetMutation", // Used by widgetMutate
 ];
 
 /// Collect TypeScript type declarations based on referenced types from proc macro

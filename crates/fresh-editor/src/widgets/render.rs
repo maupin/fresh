@@ -1928,15 +1928,7 @@ mod tests {
     fn text_input_field_width_head_truncates_long_value() {
         // 30-char value, field_width=10, unfocused → keep last 9
         // chars + `…`; no pad space.
-        let r = render_text_input(
-            "0123456789abcdefghijklmnopqrst",
-            30,
-            false,
-            "",
-            None,
-            0,
-            10,
-        );
+        let r = render_text_input("0123456789abcdefghijklmnopqrst", 30, false, "", None, 0, 10);
         assert!(r.entry.text.contains("…lmnopqrst"));
     }
 

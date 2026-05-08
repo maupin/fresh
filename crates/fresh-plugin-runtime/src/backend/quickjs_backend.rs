@@ -4404,6 +4404,35 @@ impl JsEditorApi {
             .is_ok())
     }
 
+    /// Apply a targeted mutation to a mounted widget panel — the
+    /// IPC fast path. Use instead of `updateWidgetPanel` when the
+    /// model change touches a single widget; the host applies the
+    /// mutation in place without re-transmitting the full spec.
+    /// See `WidgetMutation` in fresh.d.ts for the shapes.
+    #[qjs(rename = "widgetMutate")]
+    pub fn widget_mutate<'js>(
+        &self,
+        ctx: rquickjs::Ctx<'js>,
+        panel_id: f64,
+        mutation_obj: rquickjs::Value<'js>,
+    ) -> rquickjs::Result<bool> {
+        let json = js_to_json(&ctx, mutation_obj);
+        let mutation: fresh_core::api::WidgetMutation = match serde_json::from_value(json) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::error!("widgetMutate: invalid mutation: {}", e);
+                return Ok(false);
+            }
+        };
+        Ok(self
+            .command_sender
+            .send(PluginCommand::WidgetMutate {
+                panel_id: panel_id as u64,
+                mutation,
+            })
+            .is_ok())
+    }
+
     // === Async Operations ===
 
     /// Spawn a process (async, returns request_id)

@@ -70,5 +70,6 @@ export type {
   ButtonKind,
   HintEntry as WidgetHintEntry,
   WidgetAction,
+  WidgetMutation,
   WidgetSpec,
 } from "./widgets.ts";

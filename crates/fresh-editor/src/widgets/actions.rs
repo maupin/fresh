@@ -7,6 +7,7 @@
 //! reads from the registry, calls these, and fires events.
 
 use fresh_core::api::WidgetSpec;
+use fresh_core::text_property::TextPropertyEntry;
 
 /// Locate a widget node in a spec tree by its stable `key`. Returns
 /// the matched node, or `None` if no widget has that key.
@@ -105,6 +106,100 @@ pub fn apply_text_input_key(value: &str, cursor: usize, key: &str) -> (String, u
         "Home" => (value.to_string(), 0),
         "End" => (value.to_string(), value.len()),
         _ => (value.to_string(), cursor),
+    }
+}
+
+/// In-place mutate a `Toggle`'s `checked` field by walking the
+/// spec tree and matching on `widget_key`. Used by the
+/// `WidgetMutate::SetChecked` IPC fast path.
+///
+/// Returns true when a matching Toggle was found and updated.
+pub fn set_toggle_checked_in_spec(
+    spec: &mut WidgetSpec,
+    widget_key: &str,
+    new_checked: bool,
+) -> bool {
+    if widget_key.is_empty() {
+        return false;
+    }
+    match spec {
+        WidgetSpec::Row { children, .. } | WidgetSpec::Col { children, .. } => {
+            for c in children {
+                if set_toggle_checked_in_spec(c, widget_key, new_checked) {
+                    return true;
+                }
+            }
+            false
+        }
+        WidgetSpec::Toggle { checked, key, .. } => {
+            if key.as_deref() == Some(widget_key) {
+                *checked = new_checked;
+                true
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
+/// In-place mutate a `List`'s `items` and `item_keys` fields.
+/// Returns true when a matching List was found and updated.
+pub fn set_list_items_in_spec(
+    spec: &mut WidgetSpec,
+    widget_key: &str,
+    new_items: Vec<TextPropertyEntry>,
+    new_item_keys: Vec<String>,
+) -> bool {
+    if widget_key.is_empty() {
+        return false;
+    }
+    match spec {
+        WidgetSpec::Row { children, .. } | WidgetSpec::Col { children, .. } => {
+            // Workaround: take ownership of items to avoid double-borrow on recursive call
+            for c in children.iter_mut() {
+                if c.contains_key(widget_key) {
+                    return set_list_items_in_spec(c, widget_key, new_items, new_item_keys);
+                }
+            }
+            false
+        }
+        WidgetSpec::List {
+            items,
+            item_keys,
+            key,
+            ..
+        } => {
+            if key.as_deref() == Some(widget_key) {
+                *items = new_items;
+                *item_keys = new_item_keys;
+                true
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Recursive helper for `set_list_items_in_spec` — does this
+/// subtree contain a widget (any kind) with `widget_key`?
+trait ContainsKey {
+    fn contains_key(&self, widget_key: &str) -> bool;
+}
+
+impl ContainsKey for WidgetSpec {
+    fn contains_key(&self, widget_key: &str) -> bool {
+        match self {
+            WidgetSpec::Row { children, .. } | WidgetSpec::Col { children, .. } => {
+                children.iter().any(|c| c.contains_key(widget_key))
+            }
+            WidgetSpec::Toggle { key, .. }
+            | WidgetSpec::Button { key, .. }
+            | WidgetSpec::TextInput { key, .. }
+            | WidgetSpec::List { key, .. } => key.as_deref() == Some(widget_key),
+            _ => false,
+        }
     }
 }
 

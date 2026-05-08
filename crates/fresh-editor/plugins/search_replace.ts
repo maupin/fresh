@@ -1233,8 +1233,12 @@ editor.on("widget_event", (args) => {
 
   // `change` — fired for TextInput edits (Backspace, Delete,
   // arrows, Home/End, mode_text_input). Payload carries the new
-  // value and cursor byte offset. Plugin updates its model from
-  // these and re-emits the spec.
+  // value and cursor byte offset. The host already updated the
+  // widget's instance state in place; we just sync the plugin's
+  // model. **No** `updatePanelContent()` here — the widget has
+  // already painted, and the rest of the spec doesn't depend on
+  // the field value. This is the IPC fast path discussed in §3
+  // of the design doc Q&A.
   if (args.event_type === "change") {
     const payload = args.payload as
       | { value?: string; cursorByte?: number }
@@ -1246,24 +1250,22 @@ editor.on("widget_event", (args) => {
     if (args.widget_key === "searchField") {
       panel.searchPattern = payload.value;
       panel.cursorPos = byteToCharOffset(payload.value, cursorByte);
-      updatePanelContent();
       rerunSearchDebounced();
     } else if (args.widget_key === "replaceField") {
       panel.replaceText = payload.value;
       panel.cursorPos = byteToCharOffset(payload.value, cursorByte);
-      updatePanelContent();
     }
     return;
   }
 
   // `select` — fired when the user clicks a List row or the host
-  // moves selection (Up/Down). Mirror the absolute index into
-  // panel.matchIndex.
+  // moves selection (Up/Down). The host already updated the
+  // List's selectedIndex in instance state; mirror it into the
+  // plugin model and skip re-emit.
   if (args.event_type === "select") {
     const idx = (args.payload as { index?: number } | undefined)?.index;
     if (typeof idx === "number") {
       panel.matchIndex = idx;
-      updatePanelContent();
     }
     return;
   }
@@ -1301,8 +1303,13 @@ editor.on("widget_event", (args) => {
     }
   }
 
-  // `toggle` — fired by Enter/Space on a Toggle (case/regex/whole)
-  // and by mouse click. Payload has the new `checked` value.
+  // `toggle` — fired by Enter/Space on a Toggle and by mouse click.
+  // The host fires the event but doesn't mutate the spec's
+  // `checked` field — the plugin owns its model and pushes the
+  // new state back via the targeted `setChecked` mutator (cheaper
+  // than a full spec re-emit). The search rerun happens
+  // independently on debounce; when it finishes it re-emits the
+  // full spec with new matches.
   if (args.event_type === "toggle") {
     const newChecked = (args.payload as { checked?: boolean } | undefined)
       ?.checked;
@@ -1310,17 +1317,17 @@ editor.on("widget_event", (args) => {
     switch (args.widget_key) {
       case "case":
         panel.caseSensitive = newChecked;
-        updatePanelContent();
+        panel.widgetPanel?.setChecked("case", newChecked);
         rerunSearchDebounced();
         break;
       case "regex":
         panel.useRegex = newChecked;
-        updatePanelContent();
+        panel.widgetPanel?.setChecked("regex", newChecked);
         rerunSearchDebounced();
         break;
       case "whole":
         panel.wholeWords = newChecked;
-        updatePanelContent();
+        panel.widgetPanel?.setChecked("whole", newChecked);
         rerunSearchDebounced();
         break;
     }

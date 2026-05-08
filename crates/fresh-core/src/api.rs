@@ -1427,6 +1427,46 @@ pub enum WidgetAction {
     Key { key: String },
 }
 
+/// Targeted in-place mutation of a mounted widget panel — the
+/// IPC fast path. Plugins use these when the model change touches
+/// one widget; the host applies the mutation directly to the
+/// panel's spec / instance state and re-renders without
+/// re-transmitting the full spec.
+///
+/// `UpdateWidgetPanel` remains the right tool for structural
+/// changes (adding/removing widgets, restructuring layout). Both
+/// paths preserve instance state via widget keys.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[ts(export, rename_all = "camelCase")]
+pub enum WidgetMutation {
+    /// Set a `TextInput`'s value and (optionally) cursor byte.
+    /// Mutates instance state directly.
+    SetValue {
+        widget_key: String,
+        value: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor_byte: Option<i32>,
+    },
+    /// Set a `Toggle`'s checked state. Mutates the Toggle's
+    /// `checked` field in the spec.
+    SetChecked { widget_key: String, checked: bool },
+    /// Set a `List`'s selected index (instance state).
+    SetSelectedIndex { widget_key: String, index: i32 },
+    /// Replace a `List`'s items + parallel `item_keys`. Mutates
+    /// the List in the spec.
+    SetItems {
+        widget_key: String,
+        items: Vec<crate::text_property::TextPropertyEntry>,
+        #[serde(default)]
+        item_keys: Vec<String>,
+    },
+}
+
 /// Plugin command - allows plugins to send commands to the editor
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -2800,6 +2840,15 @@ pub enum PluginCommand {
     /// Backspace / arrows / printable input to edit a TextInput).
     /// See `WidgetAction` for the action shapes.
     WidgetCommand { panel_id: u64, action: WidgetAction },
+
+    /// Apply a targeted mutation to a mounted widget panel
+    /// without re-transmitting the full spec. The IPC fast path
+    /// for hot-path updates (typing, selection moves, partial
+    /// list refreshes). See `WidgetMutation` for the shapes.
+    WidgetMutate {
+        panel_id: u64,
+        mutation: WidgetMutation,
+    },
 }
 
 impl PluginCommand {

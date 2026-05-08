@@ -801,6 +801,25 @@ type WidgetAction = {
 	"kind": "key";
 	key: string;
 };
+type WidgetMutation = {
+	"kind": "setValue";
+	widgetKey: string;
+	value: string;
+	cursorByte?: number | null;
+} | {
+	"kind": "setChecked";
+	widgetKey: string;
+	checked: boolean;
+} | {
+	"kind": "setSelectedIndex";
+	widgetKey: string;
+	index: number;
+} | {
+	"kind": "setItems";
+	widgetKey: string;
+	items: Array<TextPropertyEntry>;
+	itemKeys: Array<string>;
+};
 type AuthorityFilesystem = {
 	kind: "local";
 };
@@ -2085,6 +2104,14 @@ interface EditorAPI {
 	* appropriate.
 	*/
 	widgetCommand(panelId: number, actionObj: unknown): boolean;
+	/**
+	* Apply a targeted mutation to a mounted widget panel — the
+	* IPC fast path. Use instead of `updateWidgetPanel` when the
+	* model change touches a single widget; the host applies the
+	* mutation in place without re-transmitting the full spec.
+	* See `WidgetMutation` in fresh.d.ts for the shapes.
+	*/
+	widgetMutate(panelId: number, mutationObj: unknown): boolean;
 	/**
 	* Spawn a process (async, returns request_id)
 	*/

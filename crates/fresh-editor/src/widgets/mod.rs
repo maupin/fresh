@@ -18,6 +18,8 @@ mod actions;
 mod registry;
 mod render;
 
-pub use actions::{apply_text_input_key, find_widget_by_key};
+pub use actions::{
+    apply_text_input_key, find_widget_by_key, set_list_items_in_spec, set_toggle_checked_in_spec,
+};
 pub use registry::{HitArea, PanelId, WidgetInstanceState, WidgetPanelState, WidgetRegistry};
 pub use render::{render_spec, FocusCursor, RenderOutput};

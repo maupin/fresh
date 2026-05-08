@@ -1446,6 +1446,10 @@ impl Editor {
             PluginCommand::WidgetCommand { panel_id, action } => {
                 self.handle_widget_command(panel_id, action);
             }
+
+            PluginCommand::WidgetMutate { panel_id, mutation } => {
+                self.handle_widget_mutate(panel_id, mutation);
+            }
         }
         Ok(())
     }
@@ -3310,6 +3314,100 @@ impl Editor {
             tracing::error!("rerender_widget_panel({}) failed: {}", panel_id, e);
         }
         self.apply_widget_focus_cursor(buffer_id, &entries, focus_cursor);
+    }
+
+    /// Apply a `WidgetMutation` in place, then re-render the panel.
+    /// This is the IPC fast path: the plugin doesn't re-transmit
+    /// the full spec; it sends one targeted change. The host
+    /// mutates the registry's spec / instance state and re-renders
+    /// against the just-mutated state.
+    fn handle_widget_mutate(&mut self, panel_id: u64, mutation: fresh_core::api::WidgetMutation) {
+        use fresh_core::api::WidgetMutation;
+
+        // Look up the panel; bail if unknown.
+        if self.widget_registry.get(panel_id).is_none() {
+            tracing::debug!(
+                "WidgetMutate for unknown panel {} ignored (not mounted)",
+                panel_id
+            );
+            return;
+        }
+
+        match mutation {
+            WidgetMutation::SetValue {
+                widget_key,
+                value,
+                cursor_byte,
+            } => {
+                // TextInput value+cursor live in instance state.
+                if let Some(panel) = self.widget_registry.get_mut(panel_id) {
+                    let cb = match cursor_byte {
+                        Some(c) if c >= 0 => (c as u32).min(value.len() as u32),
+                        _ => value.len() as u32,
+                    };
+                    panel.instance_states.insert(
+                        widget_key,
+                        crate::widgets::WidgetInstanceState::TextInput {
+                            value,
+                            cursor_byte: cb,
+                        },
+                    );
+                }
+            }
+            WidgetMutation::SetChecked {
+                widget_key,
+                checked,
+            } => {
+                // Toggle checked lives in the spec (not instance
+                // state). Walk the spec, find the Toggle by key,
+                // mutate.
+                if let Some(panel) = self.widget_registry.get_mut(panel_id) {
+                    crate::widgets::set_toggle_checked_in_spec(
+                        &mut panel.spec,
+                        &widget_key,
+                        checked,
+                    );
+                }
+            }
+            WidgetMutation::SetSelectedIndex { widget_key, index } => {
+                // List selected_index lives in instance state.
+                if let Some(panel) = self.widget_registry.get_mut(panel_id) {
+                    let prev_scroll = match panel.instance_states.get(&widget_key) {
+                        Some(crate::widgets::WidgetInstanceState::List {
+                            scroll_offset, ..
+                        }) => *scroll_offset,
+                        _ => 0,
+                    };
+                    panel.instance_states.insert(
+                        widget_key,
+                        crate::widgets::WidgetInstanceState::List {
+                            scroll_offset: prev_scroll,
+                            selected_index: index,
+                        },
+                    );
+                }
+            }
+            WidgetMutation::SetItems {
+                widget_key,
+                items,
+                item_keys,
+            } => {
+                // List items live in the spec.
+                if let Some(panel) = self.widget_registry.get_mut(panel_id) {
+                    crate::widgets::set_list_items_in_spec(
+                        &mut panel.spec,
+                        &widget_key,
+                        items,
+                        item_keys,
+                    );
+                }
+            }
+        }
+
+        // Re-render with the mutated state. `rerender_widget_panel`
+        // reads the registry's current spec + instance state and
+        // pushes the result through the buffer.
+        self.rerender_widget_panel(panel_id);
     }
 
     fn handle_widget_command(&mut self, panel_id: u64, action: fresh_core::api::WidgetAction) {

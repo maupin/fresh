@@ -43,6 +43,7 @@ export type WidgetSpec = globalThis.WidgetSpec;
 export type HintEntry = globalThis.HintEntry;
 export type ButtonKind = globalThis.ButtonKind;
 export type WidgetAction = globalThis.WidgetAction;
+export type WidgetMutation = globalThis.WidgetMutation;
 type TextPropertyEntry = globalThis.TextPropertyEntry;
 
 // =============================================================================
@@ -286,6 +287,44 @@ export class WidgetPanel {
     // deno-lint-ignore no-explicit-any
     const editor = (globalThis as any).editor;
     return editor.widgetCommand(this.panelId, action);
+  }
+
+  /** Apply a targeted mutation in place — the IPC fast path.
+   * Use instead of `set(spec)` when only one widget changes;
+   * the host applies the mutation directly and re-renders
+   * without re-transmitting the full spec. See `WidgetMutation`
+   * for the shapes. The typed wrappers below cover the common
+   * cases. */
+  mutate(mutation: WidgetMutation): boolean {
+    // deno-lint-ignore no-explicit-any
+    const editor = (globalThis as any).editor;
+    return editor.widgetMutate(this.panelId, mutation);
+  }
+
+  /** Set a `TextInput`'s value (and optionally cursor byte).
+   * Mutates host instance state; doesn't re-transmit the full
+   * spec. */
+  setValue(widgetKey: string, value: string, cursorByte?: number): boolean {
+    return this.mutate({ kind: "setValue", widgetKey, value, cursorByte });
+  }
+
+  /** Set a `Toggle`'s checked state. */
+  setChecked(widgetKey: string, checked: boolean): boolean {
+    return this.mutate({ kind: "setChecked", widgetKey, checked });
+  }
+
+  /** Set a `List`'s selected index. */
+  setSelectedIndex(widgetKey: string, index: number): boolean {
+    return this.mutate({ kind: "setSelectedIndex", widgetKey, index });
+  }
+
+  /** Replace a `List`'s items + parallel `itemKeys`. */
+  setItems(
+    widgetKey: string,
+    items: TextPropertyEntry[],
+    itemKeys: string[] = [],
+  ): boolean {
+    return this.mutate({ kind: "setItems", widgetKey, items, itemKeys });
   }
 }
 
