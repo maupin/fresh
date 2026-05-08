@@ -114,11 +114,18 @@ export function button(
 }
 
 /** Horizontal spacer of fixed column count. In a `Row` it produces
- * `cols` spaces; at the top level or in a `Col` it produces a short
- * blank line. (Flex spacers — `Spacer { flex: true }` filling
- * remaining row width — arrive with the layout engine.) */
+ * `cols` spaces; at the top level or in a `Col` it produces a
+ * short blank line. */
 export function spacer(cols: number, key?: string): WidgetSpec {
-  return { kind: "spacer", cols, key };
+  return { kind: "spacer", cols, flex: false, key };
+}
+
+/** Flex horizontal spacer — fills remaining row width
+ * (`panel_width - sum(non-flex children)`). Use to right-align a
+ * trailing widget: `row(label, flexSpacer(), button)`. With
+ * multiple flex spacers in one row the leftover splits evenly. */
+export function flexSpacer(key?: string): WidgetSpec {
+  return { kind: "spacer", cols: 0, flex: true, key };
 }
 
 /** Vertical list of pre-rendered rows with host-managed selection

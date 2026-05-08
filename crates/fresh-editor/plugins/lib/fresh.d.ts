@@ -720,6 +720,7 @@ type WidgetSpec = {
 } | {
 	"kind": "spacer";
 	cols: number;
+	flex: boolean;
 	key?: string | null;
 } | {
 	"kind": "list";

@@ -1236,12 +1236,19 @@ pub enum WidgetSpec {
         key: Option<String>,
     },
     /// Horizontal whitespace eater. In a `Row`, produces `cols`
-    /// spaces; in a `Col`, produces `cols` blank lines. v1 takes a
-    /// fixed column count; a future flex variant (`Spacer { flex:
-    /// true }`) will fill remaining row width once the layout
-    /// engine knows panel widths.
+    /// spaces (or fills remaining width if `flex: true`); in a
+    /// `Col`, produces `cols` blank lines (`flex` is ignored).
+    ///
+    /// `flex: true` distributes the row's leftover width — `panel
+    /// width - sum(non-flex child widths)` — across flex spacers.
+    /// With multiple flex spacers in one row the leftover splits
+    /// evenly. With no leftover (children already exceed panel
+    /// width), the flex spacer collapses to zero.
     Spacer {
+        #[serde(default)]
         cols: u32,
+        #[serde(default)]
+        flex: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         key: Option<String>,
     },

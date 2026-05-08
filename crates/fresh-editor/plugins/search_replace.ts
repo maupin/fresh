@@ -2,6 +2,7 @@
 import {
   button,
   col,
+  flexSpacer,
   hintBar,
   key as widgetKey,
   list,
@@ -318,45 +319,25 @@ function buildOptionsRowSpec(): WidgetSpec {
   const W = Math.max(MIN_WIDTH, panel.viewportWidth - 2);
   const oFocus = focusPanel === "options";
 
-  // Each toggle/button knows its own rendered length; sum them and
-  // distribute the remainder as a single Spacer so the Replace All
-  // button right-aligns. Lengths are exact byte counts of the rendered
-  // text the widgets emit (`[v] label` for toggles, `[ Label ]` for
-  // buttons).
+  // The flex Spacer fills whatever's left of the row so the
+  // "Replace All" button right-aligns regardless of label width or
+  // panel width. No more byteLen-summing of labels.
   const caseLabel = editor.t("panel.case_toggle");
   const regexLabel = editor.t("panel.regex_toggle");
   const wholeLabel = editor.t("panel.whole_toggle");
   const replLabel = editor.t("panel.replace_all_btn");
-  const tglLen = (label: string): number => byteLen("[v] " + label);
-  const naturalCols =
-    tglLen(caseLabel) + 2 + tglLen(regexLabel) + 2 + tglLen(wholeLabel) +
-    /* mid spacer min */ 4 +
-    /* button: "[ " + label + " ]" */ byteLen("[ " + replLabel + " ]") +
-    /* leading single space */ 1;
-  const fillCols = Math.max(4, W - naturalCols + 4);
+  void oFocus;
+  void optionIndex;
 
   return row(
     spacer(1),
-    toggle(caseSensitive, caseLabel, {
-      focused: oFocus && optionIndex === 0,
-      key: "case",
-    }),
+    toggle(caseSensitive, caseLabel, { key: "case" }),
     spacer(2),
-    toggle(useRegex, regexLabel, {
-      focused: oFocus && optionIndex === 1,
-      key: "regex",
-    }),
+    toggle(useRegex, regexLabel, { key: "regex" }),
     spacer(2),
-    toggle(wholeWords, wholeLabel, {
-      focused: oFocus && optionIndex === 2,
-      key: "whole",
-    }),
-    spacer(fillCols),
-    button(replLabel, {
-      focused: oFocus && optionIndex === 3,
-      intent: "primary",
-      key: "replaceAll",
-    }),
+    toggle(wholeWords, wholeLabel, { key: "whole" }),
+    flexSpacer(),
+    button(replLabel, { intent: "primary", key: "replaceAll" }),
   );
 }
 

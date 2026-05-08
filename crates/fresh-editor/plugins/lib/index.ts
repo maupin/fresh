@@ -50,6 +50,7 @@ export {
   activate,
   button,
   col,
+  flexSpacer,
   focusAdvance,
   hintBar,
   key,

@@ -66,10 +66,14 @@ pub struct RenderOutput {
 /// first mount). `prev_focus_key` is the previous render's focus
 /// key (or `""`); the renderer keeps it if it matches a tabbable in
 /// the new spec, otherwise falls back to the first tabbable.
+/// `panel_width` is the buffer's column width — used by `Row` to
+/// size flex `Spacer`s. Pass `u32::MAX` to disable flex (children
+/// won't be padded).
 pub fn render_spec(
     spec: &WidgetSpec,
     prev: &HashMap<String, WidgetInstanceState>,
     prev_focus_key: &str,
+    panel_width: u32,
 ) -> RenderOutput {
     // Walk the spec to collect tabbable keys, then resolve the
     // active focus key. This must happen before the entry pass so
@@ -86,13 +90,50 @@ pub fn render_spec(
 
     let mut next_state = HashMap::new();
     let (entries, hits) =
-        render_collected(spec, prev, &mut next_state, &focus_key);
+        render_collected(spec, prev, &mut next_state, &focus_key, panel_width);
     RenderOutput {
         entries,
         hits,
         instance_states: next_state,
         focus_key,
         tabbable,
+    }
+}
+
+/// One position in a Row's two-pass layout. Used internally to
+/// defer flex-spacer sizing until after we know all the inline
+/// children's natural widths.
+enum RowPiece {
+    Inline {
+        entry: TextPropertyEntry,
+        hits: Vec<HitArea>,
+    },
+    Block {
+        entries: Vec<TextPropertyEntry>,
+        hits: Vec<HitArea>,
+    },
+    Flex,
+}
+
+/// Strip a trailing `'\n'` from `entry.text` if present (overlays /
+/// hits aren't affected because the newline is at the very end and
+/// no overlay should span it). Used to prepare an inline-rendered
+/// child for Row inline-collapse, where individual newlines would
+/// split the merged row across multiple buffer lines.
+fn strip_trailing_newline(entry: &mut TextPropertyEntry) {
+    if entry.text.ends_with('\n') {
+        entry.text.pop();
+    }
+}
+
+/// Append a single trailing newline to `entry.text` if it doesn't
+/// already end with one. Each top-level entry needs to end with
+/// `\n` so it occupies its own line in the underlying virtual
+/// buffer (the buffer's line model is byte-driven; without `\n`
+/// adjacent entries concatenate into one logical line).
+fn ensure_trailing_newline(entry: &mut TextPropertyEntry) {
+    if !entry.text.ends_with('\n') {
+        entry.text.push('\n');
     }
 }
 
@@ -135,72 +176,146 @@ fn render_collected(
     prev: &HashMap<String, WidgetInstanceState>,
     next_state: &mut HashMap<String, WidgetInstanceState>,
     focus_key: &str,
+    panel_width: u32,
 ) -> (Vec<TextPropertyEntry>, Vec<HitArea>) {
     let mut entries: Vec<TextPropertyEntry> = Vec::new();
     let mut hits: Vec<HitArea> = Vec::new();
     match spec {
         WidgetSpec::Row { children, .. } => {
-            // Rows collapse inline-sized children into a single
-            // `TextPropertyEntry`. Children that emit multiple lines
-            // (e.g. nested Col, Raw with several entries) flush the
-            // accumulator and pass through. Hit areas from inline
-            // children share the merged row; their byte offsets
-            // shift by the merged-text length so far. Block
-            // children's hits keep their own row index, biased by
-            // the number of entries already emitted.
-            let mut acc: Option<TextPropertyEntry> = None;
+            // Two-pass layout for Row:
+            //  1. Walk children, render each. Track flex spacers
+            //     by index in the accumulator; their text starts
+            //     empty and grows in pass 2.
+            //  2. Compute leftover width = panel_width - sum of
+            //     non-flex widths; distribute evenly across flex
+            //     slots; expand each flex spacer's text + shift
+            //     subsequent overlays / hits accordingly.
+            //
+            // Multi-line children (Raw with N>1, nested Col)
+            // flush the row accumulator and pass through unchanged
+            // — flex layout only spans inline-sized children.
+            let mut row_pieces: Vec<RowPiece> = Vec::new();
             for child in children {
+                if let WidgetSpec::Spacer { flex: true, .. } = child {
+                    row_pieces.push(RowPiece::Flex);
+                    continue;
+                }
                 let (child_entries, child_hits) =
-                    render_collected(child, prev, next_state, focus_key);
+                    render_collected(child, prev, next_state, focus_key, panel_width);
                 if child_entries.is_empty() {
                     debug_assert!(child_hits.is_empty(), "empty children produce no hits");
                     continue;
                 }
                 if child_entries.len() == 1 {
-                    let mut child_entry = child_entries.into_iter().next().unwrap();
-                    let inline_shift = match acc.as_ref() {
-                        Some(e) => e.text.len(),
-                        None => 0,
-                    };
-                    for mut h in child_hits {
-                        // Inline child's hits all collapse onto the
-                        // accumulator's row; byte ranges shift by the
-                        // text length we've already merged.
-                        h.byte_start += inline_shift;
-                        h.byte_end += inline_shift;
-                        // buffer_row stays at 0 — caller (Col / top
-                        // level) will rebase it.
-                        hits.push(h);
-                    }
-                    match acc.as_mut() {
-                        Some(merged) => merge_inline(merged, &mut child_entry),
-                        None => acc = Some(child_entry),
-                    }
+                    let mut entry = child_entries.into_iter().next().unwrap();
+                    // Inline children can't carry their own newlines
+                    // — that would split the merged Row across
+                    // buffer lines. The Row's final merged entry
+                    // gets exactly one newline appended below.
+                    strip_trailing_newline(&mut entry);
+                    row_pieces.push(RowPiece::Inline {
+                        entry,
+                        hits: child_hits,
+                    });
                 } else {
-                    // Multi-line child: flush the accumulator and
-                    // emit the block. Hits from the block keep their
-                    // own row index relative to the block's first
-                    // line, plus the row offset of where the block
-                    // lands in `entries`.
-                    if let Some(merged) = acc.take() {
-                        entries.push(merged);
-                    }
-                    let row_offset = entries.len() as u32;
-                    for mut h in child_hits {
-                        h.buffer_row += row_offset;
-                        hits.push(h);
-                    }
-                    entries.extend(child_entries);
+                    row_pieces.push(RowPiece::Block {
+                        entries: child_entries,
+                        hits: child_hits,
+                    });
                 }
             }
-            if let Some(merged) = acc {
+
+            // Compute flex sizing.
+            let inline_natural: usize = row_pieces
+                .iter()
+                .filter_map(|p| match p {
+                    RowPiece::Inline { entry, .. } => Some(entry.text.len()),
+                    _ => None,
+                })
+                .sum();
+            let flex_count = row_pieces
+                .iter()
+                .filter(|p| matches!(p, RowPiece::Flex))
+                .count();
+            let flex_total = (panel_width as usize).saturating_sub(inline_natural);
+            // Distribute leftover evenly. With multiple flex slots,
+            // the leftover bytes spread as evenly as possible (any
+            // remainder lands in the first slot).
+            let (flex_each, flex_extra) = if flex_count == 0 {
+                (0, 0)
+            } else {
+                (flex_total / flex_count, flex_total % flex_count)
+            };
+
+            // Pass 2: assemble. Accumulate inline pieces (with
+            // collapsed flex spacers) into one entry; flush block
+            // pieces. Track byte-shift so child hits' offsets stay
+            // correct.
+            let mut acc: Option<TextPropertyEntry> = None;
+            let mut flex_seen = 0usize;
+            for piece in row_pieces {
+                match piece {
+                    RowPiece::Inline { mut entry, hits: child_hits } => {
+                        let inline_shift = match acc.as_ref() {
+                            Some(e) => e.text.len(),
+                            None => 0,
+                        };
+                        for mut h in child_hits {
+                            h.byte_start += inline_shift;
+                            h.byte_end += inline_shift;
+                            hits.push(h);
+                        }
+                        match acc.as_mut() {
+                            Some(merged) => merge_inline(merged, &mut entry),
+                            None => acc = Some(entry),
+                        }
+                    }
+                    RowPiece::Flex => {
+                        // Materialize the flex spacer as N spaces.
+                        let n = flex_each + if flex_seen < flex_extra { 1 } else { 0 };
+                        flex_seen += 1;
+                        if n > 0 {
+                            let mut text = String::with_capacity(n);
+                            for _ in 0..n {
+                                text.push(' ');
+                            }
+                            let entry = TextPropertyEntry {
+                                text,
+                                properties: Default::default(),
+                                style: None,
+                                inline_overlays: Vec::new(),
+                            };
+                            match acc.as_mut() {
+                                Some(merged) => {
+                                    let mut e = entry;
+                                    merge_inline(merged, &mut e);
+                                }
+                                None => acc = Some(entry),
+                            }
+                        }
+                    }
+                    RowPiece::Block { entries: block_entries, hits: child_hits } => {
+                        if let Some(merged) = acc.take() {
+                            entries.push(merged);
+                        }
+                        let row_offset = entries.len() as u32;
+                        for mut h in child_hits {
+                            h.buffer_row += row_offset;
+                            hits.push(h);
+                        }
+                        entries.extend(block_entries);
+                    }
+                }
+            }
+            if let Some(mut merged) = acc {
+                ensure_trailing_newline(&mut merged);
                 entries.push(merged);
             }
         }
         WidgetSpec::Col { children, .. } => {
             for child in children {
                 let (child_entries, child_hits) =
-                    render_collected(child, prev, next_state, focus_key);
+                    render_collected(child, prev, next_state, focus_key, panel_width);
                 let row_offset = entries.len() as u32;
                 for mut h in child_hits {
                     h.buffer_row += row_offset;
@@ -213,7 +328,9 @@ fn render_collected(
             entries: hint_entries,
             ..
         } => {
-            entries.push(render_hint_bar(hint_entries));
+            let mut entry = render_hint_bar(hint_entries);
+            ensure_trailing_newline(&mut entry);
+            entries.push(entry);
             // No hits — HintBar is read-only in v1. (When the
             // keymap layer arrives, individual entries become
             // clickable command targets.)
@@ -234,7 +351,7 @@ fn render_collected(
                 Some(k) if !k.is_empty() => k == focus_key,
                 _ => *focused,
             };
-            let entry = render_toggle(*checked, label, is_focused);
+            let mut entry = render_toggle(*checked, label, is_focused);
             let byte_end = entry.text.len();
             hits.push(HitArea {
                 widget_key: key.clone().unwrap_or_default(),
@@ -245,6 +362,7 @@ fn render_collected(
                 payload: json!({ "checked": !*checked }),
                 event_type: "toggle",
             });
+            ensure_trailing_newline(&mut entry);
             entries.push(entry);
         }
         WidgetSpec::Button {
@@ -257,7 +375,7 @@ fn render_collected(
                 Some(k) if !k.is_empty() => k == focus_key,
                 _ => *focused,
             };
-            let entry = render_button(label, is_focused, *intent);
+            let mut entry = render_button(label, is_focused, *intent);
             let byte_end = entry.text.len();
             hits.push(HitArea {
                 widget_key: key.clone().unwrap_or_default(),
@@ -268,23 +386,29 @@ fn render_collected(
                 payload: json!({}),
                 event_type: "activate",
             });
+            ensure_trailing_newline(&mut entry);
             entries.push(entry);
         }
-        WidgetSpec::Spacer { cols, .. } => {
-            // In an inline-row context a Spacer is N spaces; in a
-            // block context (top-level / Col) it's a short blank
-            // line. Either way: one entry, no hit areas.
+        WidgetSpec::Spacer { cols, flex, .. } => {
+            // Top-level / Col context: flex Spacers don't fill at
+            // this level (no Row to absorb their flexibility), so
+            // they fall back to `cols`. Row uses a separate code
+            // path that sees the Spacer spec directly and handles
+            // flex sizing — see RowPiece::Flex.
+            let _ = flex;
             let cols = (*cols).min(4096) as usize;
-            let mut text = String::with_capacity(cols);
+            let mut text = String::with_capacity(cols + 1);
             for _ in 0..cols {
                 text.push(' ');
             }
-            entries.push(TextPropertyEntry {
+            let mut entry = TextPropertyEntry {
                 text,
                 properties: Default::default(),
                 style: None,
                 inline_overlays: Vec::new(),
-            });
+            };
+            ensure_trailing_newline(&mut entry);
+            entries.push(entry);
         }
         WidgetSpec::List {
             items,
@@ -370,6 +494,7 @@ fn render_collected(
                     entry.style = Some(style);
                 }
                 let byte_end = entry.text.len();
+                ensure_trailing_newline(&mut entry);
                 entries.push(entry);
                 let item_key = item_keys.get(i).cloned().unwrap_or_default();
                 let hit_row = (entries.len() - 1) as u32;
@@ -435,14 +560,16 @@ fn render_collected(
             } else {
                 -1
             };
-            entries.push(render_text_input(
+            let mut entry = render_text_input(
                 &effective_value,
                 effective_cursor,
                 is_focused,
                 label,
                 placeholder.as_deref(),
                 *max_visible_chars,
-            ));
+            );
+            ensure_trailing_newline(&mut entry);
+            entries.push(entry);
             // No hit area in v1 — clicks on a TextInput will land
             // somewhere inside the bracketed value, but cursor
             // placement on click requires cursor mutation, which
@@ -456,8 +583,15 @@ fn render_collected(
             // bytes flow through unchanged. The plugin still owns
             // mouse clicks within Raw regions (via the existing
             // `mouse_click` hook); the widget runtime intentionally
-            // emits no hit areas here.
-            entries.extend(raw_entries.iter().cloned());
+            // emits no hit areas here. We *do* ensure each Raw
+            // entry ends with a newline so it occupies its own
+            // buffer line — plugins that already include `\n` are
+            // unaffected.
+            for raw_entry in raw_entries {
+                let mut e = raw_entry.clone();
+                ensure_trailing_newline(&mut e);
+                entries.push(e);
+            }
         }
     }
     (entries, hits)
@@ -783,7 +917,8 @@ mod tests {
         Vec<HitArea>,
         HashMap<String, WidgetInstanceState>,
     ) {
-        let out = render_spec(spec, prev, "");
+        // u32::MAX disables flex sizing (no leftover to distribute).
+        let out = render_spec(spec, prev, "", u32::MAX);
         (out.entries, out.hits, out.instance_states)
     }
 
@@ -843,8 +978,8 @@ mod tests {
         };
         let (out, hits, _state) = render_no_focus(&spec, &HashMap::new());
         assert_eq!(out.len(), 2);
-        assert_eq!(out[0].text, "A alpha");
-        assert_eq!(out[1].text, "B beta");
+        assert_eq!(out[0].text, "A alpha\n");
+        assert_eq!(out[1].text, "B beta\n");
         assert!(hits.is_empty(), "HintBar emits no hit areas in v1");
     }
 
@@ -856,7 +991,7 @@ mod tests {
         };
         let (out, hits, _state) = render_no_focus(&spec, &HashMap::new());
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].text, "hello");
+        assert_eq!(out[0].text, "hello\n");
         assert!(hits.is_empty());
     }
 
@@ -926,6 +1061,69 @@ mod tests {
     }
 
     #[test]
+    fn flex_spacer_fills_remaining_row_width() {
+        let spec = WidgetSpec::Row {
+            children: vec![
+                WidgetSpec::Toggle {
+                    checked: false,
+                    label: "A".into(),
+                    focused: false,
+                    key: None,
+                },
+                WidgetSpec::Spacer { cols: 0, flex: true, key: None },
+                WidgetSpec::Button {
+                    label: "B".into(),
+                    focused: false,
+                    intent: ButtonKind::Normal,
+                    key: None,
+                },
+            ],
+            key: None,
+        };
+        // Toggle "[ ] A" = 5 bytes; Button "[ B ]" = 5 bytes;
+        // panel_width = 30 → flex fills 20 spaces. Plus a trailing
+        // newline added by the Row's terminator.
+        let out = render_spec(&spec, &HashMap::new(), "", 30);
+        assert_eq!(out.entries.len(), 1);
+        let text = &out.entries[0].text;
+        assert_eq!(text.len(), 31);
+        assert!(text.starts_with("[ ] A"));
+        assert!(text.ends_with("[ B ]\n"));
+        let button_hit = out
+            .hits
+            .iter()
+            .find(|h| h.widget_kind == "button")
+            .unwrap();
+        assert_eq!(button_hit.byte_start, 25);
+        assert_eq!(button_hit.byte_end, 30);
+    }
+
+    #[test]
+    fn flex_spacer_with_no_leftover_collapses_to_zero() {
+        let spec = WidgetSpec::Row {
+            children: vec![
+                WidgetSpec::Toggle {
+                    checked: false,
+                    label: "A".into(),
+                    focused: false,
+                    key: None,
+                },
+                WidgetSpec::Spacer { cols: 0, flex: true, key: None },
+                WidgetSpec::Toggle {
+                    checked: false,
+                    label: "B".into(),
+                    focused: false,
+                    key: None,
+                },
+            ],
+            key: None,
+        };
+        // Both toggles use 5+5=10 bytes; panel_width=10 → flex=0.
+        let out = render_spec(&spec, &HashMap::new(), "", 10);
+        assert_eq!(out.entries[0].text, "[ ] A[ ] B\n");
+    }
+
+    #[test]
     fn spacer_in_row_pads_with_spaces() {
         let spec = WidgetSpec::Row {
             children: vec![
@@ -935,7 +1133,7 @@ mod tests {
                     focused: false,
                     key: None,
                 },
-                WidgetSpec::Spacer { cols: 4, key: None },
+                WidgetSpec::Spacer { cols: 4, flex: false, key: None },
                 WidgetSpec::Button {
                     label: "Go".into(),
                     focused: false,
@@ -947,7 +1145,7 @@ mod tests {
         };
         let (out, _hits, _state) = render_no_focus(&spec, &HashMap::new());
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].text, "[ ] A    [ Go ]");
+        assert_eq!(out[0].text, "[ ] A    [ Go ]\n");
     }
 
     #[test]
@@ -974,7 +1172,7 @@ mod tests {
         let (out, _hits, _state) = render_no_focus(&spec, &HashMap::new());
         assert_eq!(out.len(), 1);
         // Two adjacent HintBars are concatenated; the second's overlay shifts.
-        assert_eq!(out[0].text, "Tab xEsc y");
+        assert_eq!(out[0].text, "Tab xEsc y\n");
         assert_eq!(out[0].inline_overlays.len(), 2);
         assert_eq!(out[0].inline_overlays[1].start, 5);
         assert_eq!(out[0].inline_overlays[1].end, 8);
@@ -1032,7 +1230,7 @@ mod tests {
                     focused: false,
                     key: Some("a".into()),
                 },
-                WidgetSpec::Spacer { cols: 2, key: None },
+                WidgetSpec::Spacer { cols: 2, flex: false, key: None },
                 WidgetSpec::Toggle {
                     checked: false,
                     label: "B".into(),
@@ -1045,7 +1243,7 @@ mod tests {
         let (entries, hits, _state) = render_no_focus(&spec, &HashMap::new());
         // One merged row with text "[v] A  [ ] B"
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].text, "[v] A  [ ] B");
+        assert_eq!(entries[0].text, "[v] A  [ ] B\n");
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].widget_key, "a");
         assert_eq!(hits[0].buffer_row, 0);
@@ -1104,7 +1302,7 @@ mod tests {
                             focused: false,
                             key: Some("t".into()),
                         },
-                        WidgetSpec::Spacer { cols: 1, key: None },
+                        WidgetSpec::Spacer { cols: 1, flex: false, key: None },
                         WidgetSpec::Button {
                             label: "B".into(),
                             focused: false,
@@ -1158,7 +1356,7 @@ mod tests {
             ],
             key: None,
         };
-        let out = render_spec(&spec, &HashMap::new(), "");
+        let out = render_spec(&spec, &HashMap::new(), "", u32::MAX);
         assert_eq!(out.focus_key, "a");
         assert_eq!(out.tabbable, vec!["a", "b"]);
     }
@@ -1182,7 +1380,7 @@ mod tests {
             ],
             key: None,
         };
-        let out = render_spec(&spec, &HashMap::new(), "b");
+        let out = render_spec(&spec, &HashMap::new(), "b", u32::MAX);
         assert_eq!(out.focus_key, "b");
     }
 
@@ -1197,7 +1395,7 @@ mod tests {
             focused: false,
             key: Some("only".into()),
         };
-        let out = render_spec(&spec, &HashMap::new(), "stale");
+        let out = render_spec(&spec, &HashMap::new(), "stale", u32::MAX);
         assert_eq!(out.focus_key, "only");
     }
 
@@ -1220,7 +1418,7 @@ mod tests {
             ],
             key: None,
         };
-        let out = render_spec(&spec, &HashMap::new(), "b");
+        let out = render_spec(&spec, &HashMap::new(), "b", u32::MAX);
         assert_eq!(out.entries.len(), 1, "row collapses inline");
         // Two overlays expected from the focused B: one for B's
         // glyph (none, since unchecked) — actually unchecked emits
@@ -1253,7 +1451,7 @@ mod tests {
             }],
             key: None,
         };
-        let out = render_spec(&spec, &HashMap::new(), "");
+        let out = render_spec(&spec, &HashMap::new(), "", u32::MAX);
         assert_eq!(out.focus_key, "");
         assert!(out.tabbable.is_empty());
     }

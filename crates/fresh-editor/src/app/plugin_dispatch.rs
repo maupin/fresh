@@ -3130,7 +3130,8 @@ impl Editor {
         // *preserve* state across renders, the plugin uses Update.
         let prev = std::collections::HashMap::new();
         let prev_focus = String::new();
-        let out = crate::widgets::render_spec(&spec, &prev, &prev_focus);
+        let panel_width = self.widget_panel_width(buffer_id);
+        let out = crate::widgets::render_spec(&spec, &prev, &prev_focus, panel_width);
         self.widget_registry.mount(
             panel_id,
             buffer_id,
@@ -3172,7 +3173,13 @@ impl Editor {
             .focus_key(panel_id)
             .map(|s| s.to_string())
             .unwrap_or_default();
-        let out = crate::widgets::render_spec(&spec, &prev, &prev_focus);
+        let buffer_id_for_width = self
+            .widget_registry
+            .buffer_and_spec(panel_id)
+            .map(|(b, _)| b)
+            .unwrap_or(BufferId(0));
+        let panel_width = self.widget_panel_width(buffer_id_for_width);
+        let out = crate::widgets::render_spec(&spec, &prev, &prev_focus, panel_width);
         match self.widget_registry.update(
             panel_id,
             spec,
@@ -3199,6 +3206,26 @@ impl Editor {
         }
     }
 
+    /// Best-effort width for a buffer's containing split. Returns
+    /// the most recent `SplitViewState::viewport.width` for any
+    /// split rendering this buffer; falls back to terminal width
+    /// when the buffer hasn't been rendered yet (e.g. mid-mount).
+    /// Subtracts 2 columns to account for gutter/scrollbar/border
+    /// padding the renderer adds — leaving the right edge clear
+    /// instead of pushing content into the chrome. This is what
+    /// flex `Spacer`s inside `Row` use to size their fill.
+    fn widget_panel_width(&self, buffer_id: BufferId) -> u32 {
+        let raw = self
+            .split_view_states
+            .values()
+            .find(|vs| vs.buffer_state(buffer_id).is_some() && vs.viewport.width > 0)
+            .map(|vs| vs.viewport.width as u32)
+            .unwrap_or_else(|| self.terminal_width.max(1) as u32);
+        // Reserve 2 cols for gutter/scrollbar/border. Saturate to
+        // avoid 0 width on tiny panels.
+        raw.saturating_sub(2).max(10)
+    }
+
     /// Re-render an existing widget panel after an in-host state
     /// change (focus advance, scroll move, etc.) without the plugin
     /// re-emitting the spec. Reads the panel's current spec from
@@ -3219,7 +3246,8 @@ impl Editor {
             .focus_key(panel_id)
             .map(|s| s.to_string())
             .unwrap_or_default();
-        let out = crate::widgets::render_spec(&spec, &prev, &prev_focus);
+        let panel_width = self.widget_panel_width(buffer_id);
+        let out = crate::widgets::render_spec(&spec, &prev, &prev_focus, panel_width);
         let _ = self.widget_registry.update(
             panel_id,
             spec,
