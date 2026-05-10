@@ -2657,7 +2657,7 @@ mod tests {
         });
 
         // Set bookmark '1'
-        editor.set_bookmark('1');
+        editor.active_window_mut().set_bookmark('1');
         assert_eq!(
             editor
                 .active_window()
@@ -2683,7 +2683,7 @@ mod tests {
         assert_eq!(editor.active_cursors().primary().position, 7);
 
         // Clear bookmark
-        editor.clear_bookmark('1');
+        editor.active_window_mut().clear_bookmark('1');
         assert_eq!(editor.active_window().bookmarks.get('1'), None);
     }
 
