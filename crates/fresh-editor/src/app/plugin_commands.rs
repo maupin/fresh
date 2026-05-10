@@ -3097,7 +3097,8 @@ impl Editor {
                 })
                 .unwrap_or_default();
             if !full_content_change.is_empty() {
-                self.send_lsp_changes_for_buffer(buffer_id, full_content_change);
+                self.active_window_mut()
+                    .send_lsp_changes_for_buffer(buffer_id, full_content_change);
             }
         }
 
