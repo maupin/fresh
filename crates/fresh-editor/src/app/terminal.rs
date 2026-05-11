@@ -23,6 +23,7 @@
 //!   - Resumes live terminal rendering
 //!   - Performance: O(1) ≈ 1ms
 
+use super::window::Window;
 use super::{BufferId, BufferMetadata, Editor};
 use crate::services::authority::TerminalWrapper;
 use crate::services::terminal::TerminalId;
@@ -508,64 +509,18 @@ impl Editor {
         (cols, rows)
     }
 
-    /// Resize terminal to match split dimensions
+    /// Resize a terminal buffer's PTY in the active window.
     pub fn resize_terminal(&mut self, buffer_id: BufferId, cols: u16, rows: u16) {
-        if let Some(&terminal_id) = self.active_window().terminal_buffers.get(&buffer_id) {
-            if let Some(handle) = self
-                .active_window_mut()
-                .terminal_manager
-                .get_mut(terminal_id)
-            {
-                handle.resize(cols, rows);
-            }
-        }
+        self.active_window_mut()
+            .resize_terminal(buffer_id, cols, rows);
     }
 
-    /// Resize all visible terminal PTYs to match their current split dimensions.
-    /// Call this after operations that change split layout (maximize, resize, etc.)
+    /// Resize the active window's visible terminal PTYs to match their
+    /// current split dimensions. Thin shim over
+    /// [`Window::resize_visible_terminals`] — call this from `impl Editor`
+    /// contexts; per-window callers should use the `Window` method directly.
     pub fn resize_visible_terminals(&mut self) {
-        // Get the content area excluding file explorer
-        let file_explorer_width = if self.file_explorer_visible() {
-            self.active_window()
-                .file_explorer_width
-                .to_cols(self.terminal_width)
-        } else {
-            0
-        };
-        let editor_width = self.terminal_width.saturating_sub(file_explorer_width);
-        let editor_area = ratatui::layout::Rect::new(
-            file_explorer_width,
-            1, // menu bar
-            editor_width,
-            self.terminal_height.saturating_sub(2), // menu bar + status bar
-        );
-
-        // Get visible buffers with their areas
-        let visible_buffers = self
-            .windows
-            .get(&self.active_window)
-            .and_then(|w| w.splits.as_ref())
-            .map(|(mgr, _)| mgr)
-            .expect("active window must have a populated split layout")
-            .get_visible_buffers(editor_area);
-
-        // Resize each terminal buffer to match its split content area
-        for (_split_id, buffer_id, split_area) in visible_buffers {
-            if self
-                .active_window()
-                .terminal_buffers
-                .contains_key(&buffer_id)
-            {
-                // Calculate content dimensions (accounting for tab bar and borders)
-                // Tab bar takes 1 row, and we leave 1 for scrollbar width on right
-                let content_height = split_area.height.saturating_sub(2);
-                let content_width = split_area.width.saturating_sub(2);
-
-                if content_width > 0 && content_height > 0 {
-                    self.resize_terminal(buffer_id, content_width, content_height);
-                }
-            }
-        }
+        self.active_window_mut().resize_visible_terminals();
     }
 
     /// Handle terminal input when in terminal mode
@@ -790,6 +745,54 @@ impl Editor {
         }
 
         Some(content)
+    }
+}
+
+impl Window {
+    /// Resize a single terminal buffer's PTY (only if `buffer_id`
+    /// belongs to this window's terminal_buffers map).
+    pub fn resize_terminal(&mut self, buffer_id: BufferId, cols: u16, rows: u16) {
+        if let Some(&terminal_id) = self.terminal_buffers.get(&buffer_id) {
+            if let Some(handle) = self.terminal_manager.get_mut(terminal_id) {
+                handle.resize(cols, rows);
+            }
+        }
+    }
+
+    /// Resize all this window's visible terminal PTYs to match their
+    /// current split dimensions. Reads the window's cached
+    /// `terminal_width` / `terminal_height` for the screen size.
+    pub fn resize_visible_terminals(&mut self) {
+        // Get the content area excluding file explorer
+        let file_explorer_width = if self.file_explorer_visible {
+            self.file_explorer_width.to_cols(self.terminal_width)
+        } else {
+            0
+        };
+        let editor_width = self.terminal_width.saturating_sub(file_explorer_width);
+        let editor_area = ratatui::layout::Rect::new(
+            file_explorer_width,
+            1, // menu bar
+            editor_width,
+            self.terminal_height.saturating_sub(2), // menu bar + status bar
+        );
+
+        let Some((mgr, _)) = self.splits.as_ref() else {
+            return;
+        };
+        let visible_buffers = mgr.get_visible_buffers(editor_area);
+
+        for (_split_id, buffer_id, split_area) in visible_buffers {
+            if self.terminal_buffers.contains_key(&buffer_id) {
+                // Tab bar takes 1 row, scrollbar takes 1 column on the right.
+                let content_height = split_area.height.saturating_sub(2);
+                let content_width = split_area.width.saturating_sub(2);
+
+                if content_width > 0 && content_height > 0 {
+                    self.resize_terminal(buffer_id, content_width, content_height);
+                }
+            }
+        }
     }
 }
 

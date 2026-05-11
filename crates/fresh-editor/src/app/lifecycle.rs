@@ -254,30 +254,41 @@ impl Editor {
         );
     }
 
-    /// Resize all buffers to match new terminal size
+    /// Resize all buffers to match new terminal size. Loops over every
+    /// `Window` so each one updates its own split viewports and visible
+    /// terminal PTYs; the plugin `resize` hook fires once for the editor
+    /// as a whole.
     pub fn resize(&mut self, width: u16, height: u16) {
-        // Update terminal dimensions for future buffer creation
+        // Editor's canonical screen dimensions (used to seed new windows).
         self.terminal_width = width;
         self.terminal_height = height;
 
-        // Resize all SplitViewState viewports (viewport is now owned by SplitViewState)
-        for view_state in self
-            .windows
-            .get_mut(&self.active_window)
-            .and_then(|w| w.split_view_states_mut())
-            .expect("active window must have a populated split layout")
-            .values_mut()
-        {
-            view_state.viewport.resize(width, height);
+        for window in self.windows.values_mut() {
+            window.resize(width, height);
         }
 
-        // Resize visible terminal PTYs to match new dimensions
-        self.resize_visible_terminals();
-
-        // Notify plugins of the resize so they can adjust layouts
+        // Notify plugins of the resize so they can adjust layouts.
         self.plugin_manager.read().unwrap().run_hook(
             "resize",
             fresh_core::hooks::HookArgs::Resize { width, height },
         );
+    }
+}
+
+impl crate::app::window::Window {
+    /// Adopt the new terminal dimensions for this window: update the
+    /// cached `terminal_width` / `terminal_height`, resize every split
+    /// viewport, and resize any visible terminal PTYs.
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.terminal_width = width;
+        self.terminal_height = height;
+
+        if let Some(view_states) = self.split_view_states_mut() {
+            for view_state in view_states.values_mut() {
+                view_state.viewport.resize(width, height);
+            }
+        }
+
+        self.resize_visible_terminals();
     }
 }

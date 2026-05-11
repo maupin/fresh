@@ -306,6 +306,14 @@ pub struct Window {
     /// active window every frame.
     pub(crate) chrome_layout: ChromeLayout,
 
+    /// Last-known terminal screen dimensions, mirrored from
+    /// `Editor::terminal_width` / `Editor::terminal_height` whenever
+    /// `Editor::resize` loops over windows. Per-window because
+    /// `Window::resize_visible_terminals` and other per-window resize
+    /// logic need the screen size without reaching back to `Editor`.
+    pub(crate) terminal_width: u16,
+    pub(crate) terminal_height: u16,
+
     /// Editor-global resources shared by `Arc` clone (config, theme
     /// registry, keybindings, command registry, filesystem authority,
     /// the buffer-id allocator, …). See [`WindowResources`] for the
@@ -1492,6 +1500,8 @@ impl Window {
             composite_view_states: HashMap::new(),
             layout_cache: WindowLayoutCache::default(),
             chrome_layout: ChromeLayout::default(),
+            terminal_width: 80,
+            terminal_height: 24,
             preview: None,
             terminal_mode: false,
             terminal_mode_resume: std::collections::HashSet::new(),
