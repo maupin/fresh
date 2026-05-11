@@ -85,7 +85,10 @@ impl Editor {
 
     /// Send a response to a plugin for an async operation
     pub(super) fn send_plugin_response(&self, response: fresh_core::api::PluginResponse) {
-        self.plugin_manager.deliver_response(response);
+        self.plugin_manager
+            .read()
+            .unwrap()
+            .deliver_response(response);
     }
 
     /// Remove a pending semantic token request from tracking maps.
@@ -570,7 +573,7 @@ impl Editor {
             // here keeps in-process transitions and the test harness
             // (which simulates the restart inline) consistent.
             let label = self.authority.display_label.clone();
-            self.plugin_manager.run_hook(
+            self.plugin_manager.read().unwrap().run_hook(
                 "authority_changed",
                 crate::services::plugins::hooks::HookArgs::AuthorityChanged { label },
             );

@@ -288,7 +288,7 @@ impl Editor {
                     "prompt_confirmed: dispatching hook for prompt_type='{}', input='{}', selected_index={:?}",
                     custom_type, input, selected_index
                 );
-                self.plugin_manager.run_hook(
+                self.plugin_manager.read().unwrap().run_hook(
                     "prompt_confirmed",
                     HookArgs::PromptConfirmed {
                         prompt_type: custom_type.clone(),
@@ -671,7 +671,10 @@ impl Editor {
                 {
                     // Serialize the input as a JSON string
                     let json = serde_json::to_string(&input).unwrap_or_else(|_| "null".to_string());
-                    self.plugin_manager.resolve_callback(callback_id, json);
+                    self.plugin_manager
+                        .read()
+                        .unwrap()
+                        .resolve_callback(callback_id, json);
                 }
             }
         }
@@ -794,7 +797,7 @@ impl Editor {
                 if language_changed {
                     #[cfg(feature = "plugins")]
                     self.update_plugin_state_snapshot();
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "language_changed",
                         crate::services::plugins::hooks::HookArgs::LanguageChanged {
                             buffer_id: self.active_buffer(),
@@ -823,7 +826,7 @@ impl Editor {
                     serde_json::json!({"path": full_path.display().to_string()}),
                 );
 
-                self.plugin_manager.run_hook(
+                self.plugin_manager.read().unwrap().run_hook(
                     "after_file_save",
                     crate::services::plugins::hooks::HookArgs::AfterFileSave {
                         buffer_id: self.active_buffer(),
@@ -1248,7 +1251,7 @@ impl Editor {
             }
             #[cfg(feature = "plugins")]
             self.update_plugin_state_snapshot();
-            self.plugin_manager.run_hook(
+            self.plugin_manager.read().unwrap().run_hook(
                 "language_changed",
                 crate::services::plugins::hooks::HookArgs::LanguageChanged {
                     buffer_id: self.active_buffer(),
@@ -1278,7 +1281,7 @@ impl Editor {
             }
             #[cfg(feature = "plugins")]
             self.update_plugin_state_snapshot();
-            self.plugin_manager.run_hook(
+            self.plugin_manager.read().unwrap().run_hook(
                 "language_changed",
                 crate::services::plugins::hooks::HookArgs::LanguageChanged {
                     buffer_id,

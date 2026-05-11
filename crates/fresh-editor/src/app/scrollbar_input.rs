@@ -22,7 +22,7 @@ impl Editor {
     ) -> AnyhowResult<()> {
         // Notify plugins of mouse scroll so they can handle it for virtual buffers
         let buffer_id = self.active_buffer();
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "mouse_scroll",
             fresh_core::hooks::HookArgs::MouseScroll {
                 buffer_id,

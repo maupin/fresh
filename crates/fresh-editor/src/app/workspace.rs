@@ -850,7 +850,7 @@ impl Editor {
                 "Firing buffer_activated for active buffer {:?} after workspace restore",
                 buffer_id
             );
-            self.plugin_manager.run_hook(
+            self.plugin_manager.read().unwrap().run_hook(
                 "buffer_activated",
                 crate::services::plugins::hooks::HookArgs::BufferActivated { buffer_id },
             );

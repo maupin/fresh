@@ -683,7 +683,10 @@ impl Editor {
             #[cfg(feature = "plugins")]
             self.update_plugin_state_snapshot();
 
-            self.plugin_manager.run_hook(hook_name, args.clone());
+            self.plugin_manager
+                .read()
+                .unwrap()
+                .run_hook(hook_name, args.clone());
         }
 
         // After inter-line cursor_moved, proactively refresh lines so

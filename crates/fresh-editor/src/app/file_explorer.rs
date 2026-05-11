@@ -88,7 +88,7 @@ impl Editor {
         }
 
         // Notify plugins that the viewport dimensions changed (sidebar affects available width)
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "resize",
             fresh_core::hooks::HookArgs::Resize {
                 width: self.terminal_width,
@@ -1571,7 +1571,7 @@ impl Editor {
     /// Multi-target operations call this once per refresh, not once per
     /// file.
     pub(super) fn notify_file_explorer_change(&self, path: &Path) {
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "after_file_explorer_change",
             crate::services::plugins::hooks::HookArgs::AfterFileExplorerChange {
                 path: path.to_path_buf(),

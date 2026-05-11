@@ -62,7 +62,10 @@ impl Editor {
             .pop_front()
         {
             let json = serde_json::to_string(&payload).unwrap_or_else(|_| "null".to_string());
-            self.plugin_manager.resolve_callback(callback_id, json);
+            self.plugin_manager
+                .read()
+                .unwrap()
+                .resolve_callback(callback_id, json);
             return true;
         }
         if self.active_window_mut().key_capture_active {
@@ -1073,9 +1076,12 @@ impl Editor {
                 // direct keybinding (Alt+/) instead of palette-only access.
                 #[cfg(feature = "plugins")]
                 {
-                    if let Some(result) =
-                        self.plugin_manager.execute_action_async("start_live_grep")
-                    {
+                    let result = self
+                        .plugin_manager
+                        .read()
+                        .unwrap()
+                        .execute_action_async("start_live_grep");
+                    if let Some(result) = result {
                         match result {
                             Ok(receiver) => {
                                 self.pending_plugin_actions
@@ -1145,19 +1151,24 @@ impl Editor {
                     _ => {
                         // No cache — kick off a fresh Live Grep.
                         #[cfg(feature = "plugins")]
-                        if let Some(result) =
-                            self.plugin_manager.execute_action_async("start_live_grep")
                         {
-                            match result {
-                                Ok(receiver) => {
-                                    self.pending_plugin_actions
-                                        .push(("start_live_grep".to_string(), receiver));
-                                }
-                                Err(e) => {
-                                    self.set_status_message(format!(
-                                        "Live Grep unavailable: {}",
-                                        e
-                                    ));
+                            let result = self
+                                .plugin_manager
+                                .read()
+                                .unwrap()
+                                .execute_action_async("start_live_grep");
+                            if let Some(result) = result {
+                                match result {
+                                    Ok(receiver) => {
+                                        self.pending_plugin_actions
+                                            .push(("start_live_grep".to_string(), receiver));
+                                    }
+                                    Err(e) => {
+                                        self.set_status_message(format!(
+                                            "Live Grep unavailable: {}",
+                                            e
+                                        ));
+                                    }
                                 }
                             }
                         }
@@ -1262,10 +1273,12 @@ impl Editor {
                 }
                 #[cfg(feature = "plugins")]
                 {
-                    if let Some(result) = self
+                    let result = self
                         .plugin_manager
-                        .execute_action_async("live_grep_cycle_provider")
-                    {
+                        .read()
+                        .unwrap()
+                        .execute_action_async("live_grep_cycle_provider");
+                    if let Some(result) = result {
                         match result {
                             Ok(receiver) => {
                                 self.pending_plugin_actions
@@ -2131,22 +2144,31 @@ impl Editor {
                 // Execute the plugin callback via TypeScript plugin thread
                 // Use non-blocking version to avoid deadlock with async plugin ops
                 #[cfg(feature = "plugins")]
-                if let Some(result) = self.plugin_manager.execute_action_async(&action_name) {
-                    match result {
-                        Ok(receiver) => {
-                            // Store pending action for processing in main loop
-                            self.pending_plugin_actions
-                                .push((action_name.clone(), receiver));
+                {
+                    let result = self
+                        .plugin_manager
+                        .read()
+                        .unwrap()
+                        .execute_action_async(&action_name);
+                    if let Some(result) = result {
+                        match result {
+                            Ok(receiver) => {
+                                // Store pending action for processing in main loop
+                                self.pending_plugin_actions
+                                    .push((action_name.clone(), receiver));
+                            }
+                            Err(e) => {
+                                self.set_status_message(
+                                    t!("view.plugin_error", error = e.to_string()).to_string(),
+                                );
+                                tracing::error!("Plugin action error: {}", e);
+                            }
                         }
-                        Err(e) => {
-                            self.set_status_message(
-                                t!("view.plugin_error", error = e.to_string()).to_string(),
-                            );
-                            tracing::error!("Plugin action error: {}", e);
-                        }
+                    } else {
+                        self.set_status_message(
+                            t!("status.plugin_manager_unavailable").to_string(),
+                        );
                     }
-                } else {
-                    self.set_status_message(t!("status.plugin_manager_unavailable").to_string());
                 }
                 #[cfg(not(feature = "plugins"))]
                 {
@@ -2182,10 +2204,12 @@ impl Editor {
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| "buffer-plugin".to_string());
 
-                    match self
+                    let load_result = self
                         .plugin_manager
-                        .load_plugin_from_source(&content, &name, is_ts)
-                    {
+                        .read()
+                        .unwrap()
+                        .load_plugin_from_source(&content, &name, is_ts);
+                    match load_result {
                         Ok(()) => {
                             self.set_status_message(format!(
                                 "Plugin '{}' loaded from buffer",
@@ -2233,7 +2257,8 @@ impl Editor {
                         // tsconfig.json lists this file in `files`, so a
                         // stale copy is exactly when `getPluginApi("foo")`
                         // loses its typed overload.
-                        let declarations = self.plugin_manager.plugin_declarations();
+                        let declarations =
+                            self.plugin_manager.read().unwrap().plugin_declarations();
                         crate::init_script::write_plugin_declarations(&config_dir, &declarations);
                         match self.open_file(&path) {
                             Ok(_) => {

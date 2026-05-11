@@ -39,6 +39,7 @@ impl crate::app::Editor {
             dir_context: self.dir_context.clone(),
             tokio_runtime: self.tokio_runtime.clone(),
             async_bridge: self.async_bridge.clone(),
+            plugin_manager: std::sync::Arc::clone(&self.plugin_manager),
         }
     }
 
@@ -57,7 +58,7 @@ impl crate::app::Editor {
         let resolved_label = session.label.clone();
         self.windows.insert(id, session);
 
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "window_created",
             HookArgs::WindowCreated {
                 id: id.0,
@@ -119,7 +120,7 @@ impl crate::app::Editor {
             }
         }
 
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "active_window_changed",
             HookArgs::ActiveWindowChanged {
                 previous_id: Some(previous_id.0),
@@ -249,6 +250,8 @@ impl crate::app::Editor {
         }
 
         self.plugin_manager
+            .read()
+            .unwrap()
             .run_hook("window_closed", HookArgs::WindowClosed { id: id.0 });
 
         true
@@ -294,13 +297,13 @@ impl crate::app::Editor {
         ) -> (R, Vec<WindowControlEvent>),
     {
         let id = self.active_window;
-        // Disjoint sub-field borrows: `self.plugin_manager` (immut)
-        // and `self.windows` (mut) are different fields, so the
-        // borrow checker is happy with both held for the closure's
-        // duration.
-        let plugins = &self.plugin_manager;
-        let window = self.windows.get_mut(&id)?;
-        let (result, events) = f(window, plugins);
+        // Hold the read guard for the closure call, then drop it before
+        // applying control events (which take `&mut self`).
+        let (result, events) = {
+            let plugins = self.plugin_manager.read().unwrap();
+            let window = self.windows.get_mut(&id)?;
+            f(window, &plugins)
+        };
         for event in events {
             self.apply_window_control_event(event);
         }

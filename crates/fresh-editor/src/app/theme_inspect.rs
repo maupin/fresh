@@ -42,7 +42,7 @@ impl Editor {
             .theme_registry
             .resolve_key(&self.config.theme.0)
             .unwrap_or_else(|| self.config.theme.0.clone());
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "theme_inspect_key",
             HookArgs::ThemeInspectKey { theme_name, key },
         );

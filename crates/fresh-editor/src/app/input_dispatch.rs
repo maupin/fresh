@@ -333,7 +333,7 @@ impl Editor {
                             _ => None,
                         });
                 if let Some(custom_type) = plugin_custom_type {
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "prompt_selection_changed",
                         crate::services::plugins::hooks::HookArgs::PromptSelectionChanged {
                             prompt_type: custom_type.clone(),

@@ -1256,7 +1256,7 @@ impl Editor {
         // Update the plugin state snapshot with working_dir BEFORE loading plugins
         // This ensures plugins can call getCwd() correctly during initialization
         #[cfg(feature = "plugins")]
-        if let Some(snapshot_handle) = plugin_manager.state_snapshot_handle() {
+        if let Some(snapshot_handle) = plugin_manager.read().unwrap().state_snapshot_handle() {
             let mut snapshot = snapshot_handle.write().unwrap();
             snapshot.working_dir = working_dir.clone();
         }
@@ -1267,7 +1267,7 @@ impl Editor {
         // 3. From embedded plugins (for cargo-binstall, when embed-plugins feature is enabled)
         // 4. User plugins directory (~/.config/fresh/plugins)
         // 5. Package manager installed plugins (~/.config/fresh/plugins/packages/*)
-        if plugin_manager.is_active() {
+        if plugin_manager.read().unwrap().is_active() {
             let mut plugin_dirs: Vec<std::path::PathBuf> = vec![];
 
             // Check next to executable first (for cargo-dist installations)
@@ -1340,7 +1340,7 @@ impl Editor {
             for plugin_dir in plugin_dirs {
                 tracing::info!("Loading TypeScript plugins from: {:?}", plugin_dir);
                 let (errors, discovered_plugins) =
-                    plugin_manager.load_plugins_from_dir_with_config(&plugin_dir, &config.plugins);
+                    plugin_manager.read().unwrap().load_plugins_from_dir_with_config(&plugin_dir, &config.plugins);
 
                 // Merge discovered plugins into config
                 // discovered_plugins already contains the merged config (saved enabled state + discovered path)
@@ -1626,8 +1626,8 @@ impl Editor {
         #[cfg(feature = "plugins")]
         {
             editor.update_plugin_state_snapshot();
-            if editor.plugin_manager.is_active() {
-                editor.plugin_manager.run_hook(
+            if editor.plugin_manager.read().unwrap().is_active() {
+                editor.plugin_manager.read().unwrap().run_hook(
                     "editor_initialized",
                     crate::services::plugins::hooks::HookArgs::EditorInitialized {},
                 );
@@ -1712,7 +1712,7 @@ impl Editor {
 
     /// Send a response to a plugin for an async operation
     fn send_plugin_response(&self, response: fresh_core::api::PluginResponse) {
-        self.plugin_manager.deliver_response(response);
+        self.plugin_manager.read().unwrap().deliver_response(response);
     }
 
     /// Remove a pending semantic token request from tracking maps.
@@ -2361,7 +2361,7 @@ impl Editor {
         self.update_plugin_state_snapshot();
 
         // Emit buffer_activated hook for plugins
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "buffer_activated",
             crate::services::plugins::hooks::HookArgs::BufferActivated { buffer_id },
         );
@@ -3080,7 +3080,7 @@ impl Editor {
             #[cfg(feature = "plugins")]
             self.update_plugin_state_snapshot();
 
-            self.plugin_manager.run_hook(hook_name, args.clone());
+            self.plugin_manager.read().unwrap().run_hook(hook_name, args.clone());
         }
 
         // After inter-line cursor_moved, proactively refresh lines so
@@ -3587,7 +3587,7 @@ impl Editor {
         self.resize_visible_terminals();
 
         // Notify plugins of the resize so they can adjust layouts
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "resize",
             fresh_core::hooks::HookArgs::Resize { width, height },
         );
@@ -4135,7 +4135,7 @@ impl Editor {
                 PromptType::Plugin { custom_type } => {
                     // Fire plugin hook for prompt cancellation
                     use crate::services::plugins::hooks::HookArgs;
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "prompt_cancelled",
                         HookArgs::PromptCancelled {
                             prompt_type: custom_type.clone(),
@@ -4158,8 +4158,7 @@ impl Editor {
                 PromptType::AsyncPrompt => {
                     // Resolve the pending async prompt callback with null (cancelled)
                     if let Some(callback_id) = self.pending_async_prompt_callback.take() {
-                        self.plugin_manager
-                            .resolve_callback(callback_id, "null".to_string());
+                        self.plugin_manager.read().unwrap().resolve_callback(callback_id, "null".to_string());
                     }
                 }
                 _ => {}
@@ -4512,7 +4511,7 @@ impl Editor {
                 }
                 // Fire plugin hook for prompt input change
                 use crate::services::plugins::hooks::HookArgs;
-                self.plugin_manager.run_hook(
+                self.plugin_manager.read().unwrap().run_hook(
                     "prompt_changed",
                     HookArgs::PromptChanged {
                         prompt_type: custom_type,
@@ -4558,7 +4557,7 @@ impl Editor {
     pub fn process_async_messages(&mut self) -> bool {
         // Check plugin thread health - will panic if thread died due to error
         // This ensures plugin errors surface quickly instead of causing silent hangs
-        self.plugin_manager.check_thread_health();
+        self.plugin_manager.write().unwrap().check_thread_health();
 
         let Some(bridge) = &self.async_bridge else {
             return false;
@@ -4635,7 +4634,7 @@ impl Editor {
                     .to_string();
 
                     // Fire the LspServerError hook for plugins
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "lsp_server_error",
                         crate::services::plugins::hooks::HookArgs::LspServerError {
                             language: language.clone(),
@@ -4837,13 +4836,13 @@ impl Editor {
                             );
                         }
                         PluginAsyncMessage::DelayComplete { callback_id } => {
-                            self.plugin_manager.resolve_callback(
+                            self.plugin_manager.read().unwrap().resolve_callback(
                                 JsCallbackId::from(callback_id),
                                 "null".to_string(),
                             );
                         }
                         PluginAsyncMessage::ProcessStdout { process_id, data } => {
-                            self.plugin_manager.run_hook(
+                            self.plugin_manager.read().unwrap().run_hook(
                                 "onProcessStdout",
                                 crate::services::plugins::hooks::HookArgs::ProcessOutput {
                                     process_id,
@@ -4852,7 +4851,7 @@ impl Editor {
                             );
                         }
                         PluginAsyncMessage::ProcessStderr { process_id, data } => {
-                            self.plugin_manager.run_hook(
+                            self.plugin_manager.read().unwrap().run_hook(
                                 "onProcessStderr",
                                 crate::services::plugins::hooks::HookArgs::ProcessOutput {
                                     process_id,
@@ -4870,7 +4869,7 @@ impl Editor {
                                 process_id,
                                 exit_code,
                             };
-                            self.plugin_manager.resolve_callback(
+                            self.plugin_manager.read().unwrap().resolve_callback(
                                 JsCallbackId::from(callback_id),
                                 serde_json::to_string(&result).unwrap(),
                             );
@@ -4894,7 +4893,7 @@ impl Editor {
                                 search_id,
                                 matches_json.len()
                             );
-                            self.plugin_manager.call_streaming_callback(
+                            self.plugin_manager.read().unwrap().call_streaming_callback(
                                 JsCallbackId::from(search_id),
                                 matches_json,
                                 false,
@@ -4907,7 +4906,7 @@ impl Editor {
                             truncated,
                         } => {
                             self.streaming_grep_cancellation = None;
-                            self.plugin_manager.resolve_callback(
+                            self.plugin_manager.read().unwrap().resolve_callback(
                                 JsCallbackId::from(callback_id),
                                 format!(
                                     r#"{{"totalMatches":{},"truncated":{}}}"#,
@@ -5101,8 +5100,7 @@ impl Editor {
                     // Resolve plugin callbacks that were waiting for this build
                     #[cfg(feature = "plugins")]
                     for cb_id in callback_ids {
-                        self.plugin_manager
-                            .resolve_callback(cb_id, "null".to_string());
+                        self.plugin_manager.read().unwrap().resolve_callback(cb_id, "null".to_string());
                     }
 
                     // Flush any plugin grammars that arrived during the build
@@ -5251,7 +5249,7 @@ impl Editor {
     #[cfg(feature = "plugins")]
     fn update_plugin_state_snapshot(&mut self) {
         // Update TypeScript plugin manager state
-        if let Some(snapshot_handle) = self.plugin_manager.state_snapshot_handle() {
+        if let Some(snapshot_handle) = self.plugin_manager.read().unwrap().state_snapshot_handle() {
             use fresh_core::api::{BufferInfo, CursorInfo, ViewportInfo};
             let mut snapshot = snapshot_handle.write().unwrap();
 
@@ -5669,7 +5667,7 @@ impl Editor {
                 let callback_id = fresh_core::api::JsCallbackId::from(request_id);
                 let json = serde_json::to_string(&split_id.map(|s| s.0 .0))
                     .unwrap_or_else(|_| "null".to_string());
-                self.plugin_manager.resolve_callback(callback_id, json);
+                self.plugin_manager.read().unwrap().resolve_callback(callback_id, json);
             }
             PluginCommand::DistributeSplitsEvenly { split_ids: _ } => {
                 self.handle_distribute_splits_evenly();
@@ -5939,8 +5937,7 @@ impl Editor {
                     });
                 } else {
                     // No async runtime - reject the callback
-                    self.plugin_manager
-                        .reject_callback(callback_id, "Async runtime not available".to_string());
+                    self.plugin_manager.read().unwrap().reject_callback(callback_id, "Async runtime not available".to_string());
                 }
             }
 
@@ -5954,7 +5951,7 @@ impl Editor {
                     "SpawnProcessWait not fully implemented - process_id={}",
                     process_id
                 );
-                self.plugin_manager.reject_callback(
+                self.plugin_manager.read().unwrap().reject_callback(
                     callback_id,
                     format!(
                         "SpawnProcessWait not yet fully implemented for process_id={}",
@@ -5984,8 +5981,7 @@ impl Editor {
                 } else {
                     // Fallback to blocking if no runtime available
                     std::thread::sleep(std::time::Duration::from_millis(duration_ms));
-                    self.plugin_manager
-                        .resolve_callback(callback_id, "null".to_string());
+                    self.plugin_manager.read().unwrap().resolve_callback(callback_id, "null".to_string());
                 }
             }
 
@@ -6101,8 +6097,7 @@ impl Editor {
                         .insert(process_id, handle.abort_handle());
                 } else {
                     // No runtime - reject immediately
-                    self.plugin_manager
-                        .reject_callback(callback_id, "Async runtime not available".to_string());
+                    self.plugin_manager.read().unwrap().reject_callback(callback_id, "Async runtime not available".to_string());
                 }
             }
 
@@ -6197,7 +6192,7 @@ impl Editor {
                                 buffer_id: buffer_id.0 as u64,
                                 split_id: None,
                             };
-                            self.plugin_manager.resolve_callback(
+                            self.plugin_manager.read().unwrap().resolve_callback(
                                 fresh_core::api::JsCallbackId::from(req_id),
                                 serde_json::to_string(&result).unwrap_or_default(),
                             );
@@ -6257,7 +6252,7 @@ impl Editor {
                                     buffer_id: existing_buffer_id.0 as u64,
                                     split_id: splits.first().map(|s| s.0 .0 as u64),
                                 };
-                                self.plugin_manager.resolve_callback(
+                                self.plugin_manager.read().unwrap().resolve_callback(
                                     fresh_core::api::JsCallbackId::from(req_id),
                                     serde_json::to_string(&result).unwrap_or_default(),
                                 );
@@ -6369,7 +6364,7 @@ impl Editor {
                         buffer_id: buffer_id.0 as u64,
                         split_id: created_split_id.map(|s| s.0 .0 as u64),
                     };
-                    self.plugin_manager.resolve_callback(
+                    self.plugin_manager.read().unwrap().resolve_callback(
                         fresh_core::api::JsCallbackId::from(req_id),
                         serde_json::to_string(&result).unwrap_or_default(),
                     );
@@ -6470,7 +6465,7 @@ impl Editor {
                         buffer_id: buffer_id.0 as u64,
                         split_id: Some(split_id.0 as u64),
                     };
-                    self.plugin_manager.resolve_callback(
+                    self.plugin_manager.read().unwrap().resolve_callback(
                         fresh_core::api::JsCallbackId::from(req_id),
                         serde_json::to_string(&result).unwrap_or_default(),
                     );
@@ -6895,7 +6890,7 @@ impl Editor {
                             terminal_id: terminal_id.0 as u64,
                             split_id: created_split_id.map(|s| s.0 .0 as u64),
                         };
-                        self.plugin_manager.resolve_callback(
+                        self.plugin_manager.read().unwrap().resolve_callback(
                             fresh_core::api::JsCallbackId::from(request_id),
                             serde_json::to_string(&result).unwrap_or_default(),
                         );
@@ -6908,7 +6903,7 @@ impl Editor {
                     }
                     Err(e) => {
                         tracing::error!("Failed to create terminal for plugin: {}", e);
-                        self.plugin_manager.reject_callback(
+                        self.plugin_manager.read().unwrap().reject_callback(
                             fresh_core::api::JsCallbackId::from(request_id),
                             format!("Failed to create terminal: {}", e),
                         );
@@ -7029,16 +7024,14 @@ impl Editor {
     /// Load a plugin from a file path
     #[cfg(feature = "plugins")]
     fn handle_load_plugin(&mut self, path: std::path::PathBuf, callback_id: JsCallbackId) {
-        match self.plugin_manager.load_plugin(&path) {
+        match self.plugin_manager.read().unwrap().load_plugin(&path) {
             Ok(()) => {
                 tracing::info!("Loaded plugin from {:?}", path);
-                self.plugin_manager
-                    .resolve_callback(callback_id, "true".to_string());
+                self.plugin_manager.read().unwrap().resolve_callback(callback_id, "true".to_string());
             }
             Err(e) => {
                 tracing::error!("Failed to load plugin from {:?}: {}", path, e);
-                self.plugin_manager
-                    .reject_callback(callback_id, format!("{}", e));
+                self.plugin_manager.read().unwrap().reject_callback(callback_id, format!("{}", e));
             }
         }
     }
@@ -7046,16 +7039,14 @@ impl Editor {
     /// Unload a plugin by name
     #[cfg(feature = "plugins")]
     fn handle_unload_plugin(&mut self, name: String, callback_id: JsCallbackId) {
-        match self.plugin_manager.unload_plugin(&name) {
+        match self.plugin_manager.read().unwrap().unload_plugin(&name) {
             Ok(()) => {
                 tracing::info!("Unloaded plugin: {}", name);
-                self.plugin_manager
-                    .resolve_callback(callback_id, "true".to_string());
+                self.plugin_manager.read().unwrap().resolve_callback(callback_id, "true".to_string());
             }
             Err(e) => {
                 tracing::error!("Failed to unload plugin '{}': {}", name, e);
-                self.plugin_manager
-                    .reject_callback(callback_id, format!("{}", e));
+                self.plugin_manager.read().unwrap().reject_callback(callback_id, format!("{}", e));
             }
         }
     }
@@ -7063,16 +7054,14 @@ impl Editor {
     /// Reload a plugin by name
     #[cfg(feature = "plugins")]
     fn handle_reload_plugin(&mut self, name: String, callback_id: JsCallbackId) {
-        match self.plugin_manager.reload_plugin(&name) {
+        match self.plugin_manager.read().unwrap().reload_plugin(&name) {
             Ok(()) => {
                 tracing::info!("Reloaded plugin: {}", name);
-                self.plugin_manager
-                    .resolve_callback(callback_id, "true".to_string());
+                self.plugin_manager.read().unwrap().resolve_callback(callback_id, "true".to_string());
             }
             Err(e) => {
                 tracing::error!("Failed to reload plugin '{}': {}", name, e);
-                self.plugin_manager
-                    .reject_callback(callback_id, format!("{}", e));
+                self.plugin_manager.read().unwrap().reject_callback(callback_id, format!("{}", e));
             }
         }
     }
@@ -7080,7 +7069,7 @@ impl Editor {
     /// List all loaded plugins
     #[cfg(feature = "plugins")]
     fn handle_list_plugins(&mut self, callback_id: JsCallbackId) {
-        let plugins = self.plugin_manager.list_plugins();
+        let plugins = self.plugin_manager.read().unwrap().list_plugins();
         // Serialize to JSON array of { name, path, enabled }
         let json_array: Vec<serde_json::Value> = plugins
             .iter()
@@ -7093,7 +7082,7 @@ impl Editor {
             })
             .collect();
         let json_str = serde_json::to_string(&json_array).unwrap_or_else(|_| "[]".to_string());
-        self.plugin_manager.resolve_callback(callback_id, json_str);
+        self.plugin_manager.read().unwrap().resolve_callback(callback_id, json_str);
     }
 
     /// Execute an editor action by name (for vi mode plugin)
@@ -7170,10 +7159,10 @@ impl Editor {
             Ok(text) => {
                 // Serialize text as JSON string
                 let json = serde_json::to_string(&text).unwrap_or_else(|_| "null".to_string());
-                self.plugin_manager.resolve_callback(callback_id, json);
+                self.plugin_manager.read().unwrap().resolve_callback(callback_id, json);
             }
             Err(error) => {
-                self.plugin_manager.reject_callback(callback_id, error);
+                self.plugin_manager.read().unwrap().reject_callback(callback_id, error);
             }
         }
     }
@@ -7228,7 +7217,7 @@ impl Editor {
         let callback_id = fresh_core::api::JsCallbackId::from(request_id);
         // Serialize as JSON (null for None, number for Some)
         let json = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
-        self.plugin_manager.resolve_callback(callback_id, json);
+        self.plugin_manager.read().unwrap().resolve_callback(callback_id, json);
     }
 
     /// Get the byte offset of the end of a line in the active buffer
@@ -7273,7 +7262,7 @@ impl Editor {
 
         let callback_id = fresh_core::api::JsCallbackId::from(request_id);
         let json = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
-        self.plugin_manager.resolve_callback(callback_id, json);
+        self.plugin_manager.read().unwrap().resolve_callback(callback_id, json);
     }
 
     /// Get the total number of lines in a buffer
@@ -7308,7 +7297,7 @@ impl Editor {
 
         let callback_id = fresh_core::api::JsCallbackId::from(request_id);
         let json = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
-        self.plugin_manager.resolve_callback(callback_id, json);
+        self.plugin_manager.read().unwrap().resolve_callback(callback_id, json);
     }
 
     /// Scroll a split to center a specific line in the viewport

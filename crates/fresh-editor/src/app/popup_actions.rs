@@ -52,7 +52,7 @@ impl Editor {
                     .and_then(|item| item.data.clone())
                     .unwrap_or_else(|| "dismissed".to_string());
                 self.hide_popup();
-                self.plugin_manager.run_hook(
+                self.plugin_manager.read().unwrap().run_hook(
                     "action_popup_result",
                     crate::services::plugins::hooks::HookArgs::ActionPopupResult {
                         popup_id,
@@ -289,7 +289,7 @@ impl Editor {
                     popup_id
                 );
                 self.hide_popup();
-                self.plugin_manager.run_hook(
+                self.plugin_manager.read().unwrap().run_hook(
                     "action_popup_result",
                     crate::services::plugins::hooks::HookArgs::ActionPopupResult {
                         popup_id,

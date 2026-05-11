@@ -216,7 +216,7 @@ impl Editor {
 
                     let (content_x, content_y) = content_rect.map(|r| (r.x, r.y)).unwrap_or((0, 0));
 
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "mouse_move",
                         HookArgs::MouseMove {
                             column: col,

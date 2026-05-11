@@ -175,6 +175,13 @@ pub struct WindowResources {
     /// to publish messages back to the editor's main loop. The Receiver
     /// is `Arc<Mutex<>>` internally, so all clones drain the same queue.
     pub async_bridge: Option<crate::services::async_bridge::AsyncBridge>,
+
+    /// Plugin manager (single QuickJS instance), wrapped in
+    /// `Arc<RwLock<>>` so windows can fire hooks and read state
+    /// without going through `Editor`. Reads take a read lock; the
+    /// few `&mut self` methods (process_commands, check_thread_health,
+    /// test_inject_command) take a write lock.
+    pub plugin_manager: Arc<RwLock<crate::services::plugins::manager::PluginManager>>,
 }
 
 /// Cross-window orchestration events that a `Window` handler returns to

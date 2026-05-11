@@ -137,7 +137,7 @@ impl Editor {
     #[cfg(feature = "plugins")]
     pub(super) fn update_plugin_state_snapshot(&mut self) {
         // Update TypeScript plugin manager state
-        if let Some(snapshot_handle) = self.plugin_manager.state_snapshot_handle() {
+        if let Some(snapshot_handle) = self.plugin_manager.read().unwrap().state_snapshot_handle() {
             use fresh_core::api::{BufferInfo, CursorInfo, ViewportInfo};
             let mut snapshot = snapshot_handle.write().unwrap();
 
@@ -1675,15 +1675,19 @@ impl Editor {
     /// Load a plugin from a file path
     #[cfg(feature = "plugins")]
     fn handle_load_plugin(&mut self, path: std::path::PathBuf, callback_id: JsCallbackId) {
-        match self.plugin_manager.load_plugin(&path) {
+        match self.plugin_manager.read().unwrap().load_plugin(&path) {
             Ok(()) => {
                 tracing::info!("Loaded plugin from {:?}", path);
                 self.plugin_manager
+                    .read()
+                    .unwrap()
                     .resolve_callback(callback_id, "true".to_string());
             }
             Err(e) => {
                 tracing::error!("Failed to load plugin from {:?}: {}", path, e);
                 self.plugin_manager
+                    .read()
+                    .unwrap()
                     .reject_callback(callback_id, format!("{}", e));
             }
         }
@@ -1692,15 +1696,19 @@ impl Editor {
     /// Unload a plugin by name
     #[cfg(feature = "plugins")]
     fn handle_unload_plugin(&mut self, name: String, callback_id: JsCallbackId) {
-        match self.plugin_manager.unload_plugin(&name) {
+        match self.plugin_manager.read().unwrap().unload_plugin(&name) {
             Ok(()) => {
                 tracing::info!("Unloaded plugin: {}", name);
                 self.plugin_manager
+                    .read()
+                    .unwrap()
                     .resolve_callback(callback_id, "true".to_string());
             }
             Err(e) => {
                 tracing::error!("Failed to unload plugin '{}': {}", name, e);
                 self.plugin_manager
+                    .read()
+                    .unwrap()
                     .reject_callback(callback_id, format!("{}", e));
             }
         }
@@ -1709,15 +1717,19 @@ impl Editor {
     /// Reload a plugin by name
     #[cfg(feature = "plugins")]
     fn handle_reload_plugin(&mut self, name: String, callback_id: JsCallbackId) {
-        match self.plugin_manager.reload_plugin(&name) {
+        match self.plugin_manager.read().unwrap().reload_plugin(&name) {
             Ok(()) => {
                 tracing::info!("Reloaded plugin: {}", name);
                 self.plugin_manager
+                    .read()
+                    .unwrap()
                     .resolve_callback(callback_id, "true".to_string());
             }
             Err(e) => {
                 tracing::error!("Failed to reload plugin '{}': {}", name, e);
                 self.plugin_manager
+                    .read()
+                    .unwrap()
                     .reject_callback(callback_id, format!("{}", e));
             }
         }
@@ -1726,7 +1738,7 @@ impl Editor {
     /// List all loaded plugins
     #[cfg(feature = "plugins")]
     fn handle_list_plugins(&mut self, callback_id: JsCallbackId) {
-        let plugins = self.plugin_manager.list_plugins();
+        let plugins = self.plugin_manager.read().unwrap().list_plugins();
         // Serialize to JSON array of { name, path, enabled }
         let json_array: Vec<serde_json::Value> = plugins
             .iter()
@@ -1739,7 +1751,10 @@ impl Editor {
             })
             .collect();
         let json_str = serde_json::to_string(&json_array).unwrap_or_else(|_| "[]".to_string());
-        self.plugin_manager.resolve_callback(callback_id, json_str);
+        self.plugin_manager
+            .read()
+            .unwrap()
+            .resolve_callback(callback_id, json_str);
     }
 
     /// Execute an editor action by name (for vi mode plugin)
@@ -1822,10 +1837,16 @@ impl Editor {
             Ok(text) => {
                 // Serialize text as JSON string
                 let json = serde_json::to_string(&text).unwrap_or_else(|_| "null".to_string());
-                self.plugin_manager.resolve_callback(callback_id, json);
+                self.plugin_manager
+                    .read()
+                    .unwrap()
+                    .resolve_callback(callback_id, json);
             }
             Err(error) => {
-                self.plugin_manager.reject_callback(callback_id, error);
+                self.plugin_manager
+                    .read()
+                    .unwrap()
+                    .reject_callback(callback_id, error);
             }
         }
     }
@@ -1849,7 +1870,10 @@ impl Editor {
     fn resolve_json_callback<T: serde::Serialize>(&mut self, request_id: u64, value: T) {
         let callback_id = fresh_core::api::JsCallbackId::from(request_id);
         let json = serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string());
-        self.plugin_manager.resolve_callback(callback_id, json);
+        self.plugin_manager
+            .read()
+            .unwrap()
+            .resolve_callback(callback_id, json);
     }
 
     /// Get the byte offset of the start of a line in the active buffer
@@ -2156,6 +2180,8 @@ impl Editor {
             });
         } else {
             self.plugin_manager
+                .read()
+                .unwrap()
                 .reject_callback(callback_id, "Async runtime not available".to_string());
         }
     }
@@ -2272,6 +2298,8 @@ impl Editor {
         } else {
             // No runtime - reject immediately
             self.plugin_manager
+                .read()
+                .unwrap()
                 .reject_callback(callback_id, "Async runtime not available".to_string());
         }
     }
@@ -2364,7 +2392,7 @@ impl Editor {
                         buffer_id: buffer_id.0 as u64,
                         split_id: None,
                     };
-                    self.plugin_manager.resolve_callback(
+                    self.plugin_manager.read().unwrap().resolve_callback(
                         fresh_core::api::JsCallbackId::from(req_id),
                         serde_json::to_string(&result).unwrap_or_default(),
                     );
@@ -2478,7 +2506,7 @@ impl Editor {
                         buffer_id: buffer_id.0 as u64,
                         split_id: Some(dock_leaf.0 .0 as u64),
                     };
-                    self.plugin_manager.resolve_callback(
+                    self.plugin_manager.read().unwrap().resolve_callback(
                         fresh_core::api::JsCallbackId::from(req_id),
                         serde_json::to_string(&result).unwrap_or_default(),
                     );
@@ -2539,7 +2567,7 @@ impl Editor {
                             buffer_id: existing_buffer_id.0 as u64,
                             split_id: splits.first().map(|s| s.0 .0 as u64),
                         };
-                        self.plugin_manager.resolve_callback(
+                        self.plugin_manager.read().unwrap().resolve_callback(
                             fresh_core::api::JsCallbackId::from(req_id),
                             serde_json::to_string(&result).unwrap_or_default(),
                         );
@@ -2729,7 +2757,7 @@ impl Editor {
                 buffer_id: buffer_id.0 as u64,
                 split_id: created_split_id.map(|s| s.0 .0 as u64),
             };
-            self.plugin_manager.resolve_callback(
+            self.plugin_manager.read().unwrap().resolve_callback(
                 fresh_core::api::JsCallbackId::from(req_id),
                 serde_json::to_string(&result).unwrap_or_default(),
             );
@@ -2822,7 +2850,7 @@ impl Editor {
                 buffer_id: buffer_id.0 as u64,
                 split_id: Some(split_id.0 as u64),
             };
-            self.plugin_manager.resolve_callback(
+            self.plugin_manager.read().unwrap().resolve_callback(
                 fresh_core::api::JsCallbackId::from(req_id),
                 serde_json::to_string(&result).unwrap_or_default(),
             );
@@ -3129,7 +3157,7 @@ impl Editor {
                     terminal_id: terminal_id.0 as u64,
                     split_id: created_split_id.map(|s| s.0 .0 as u64),
                 };
-                self.plugin_manager.resolve_callback(
+                self.plugin_manager.read().unwrap().resolve_callback(
                     fresh_core::api::JsCallbackId::from(request_id),
                     serde_json::to_string(&result).unwrap_or_default(),
                 );
@@ -3142,7 +3170,7 @@ impl Editor {
             }
             Err(e) => {
                 tracing::error!("Failed to create terminal for plugin: {}", e);
-                self.plugin_manager.reject_callback(
+                self.plugin_manager.read().unwrap().reject_callback(
                     fresh_core::api::JsCallbackId::from(request_id),
                     format!("Failed to create terminal: {}", e),
                 );
@@ -3227,7 +3255,7 @@ impl Editor {
             Ok(id) => id,
             Err(e) => {
                 tracing::error!("Failed to create terminal for inactive session: {}", e);
-                self.plugin_manager.reject_callback(
+                self.plugin_manager.read().unwrap().reject_callback(
                     fresh_core::api::JsCallbackId::from(request_id),
                     format!("Failed to create terminal: {}", e),
                 );
@@ -3316,7 +3344,7 @@ impl Editor {
             terminal_id: terminal_id.0 as u64,
             split_id: new_split_id.map(|s| s.0 .0 as u64),
         };
-        self.plugin_manager.resolve_callback(
+        self.plugin_manager.read().unwrap().resolve_callback(
             fresh_core::api::JsCallbackId::from(request_id),
             serde_json::to_string(&result).unwrap(),
         );
@@ -3335,7 +3363,10 @@ impl Editor {
         let callback_id = fresh_core::api::JsCallbackId::from(request_id);
         let json =
             serde_json::to_string(&split_id.map(|s| s.0 .0)).unwrap_or_else(|_| "null".to_string());
-        self.plugin_manager.resolve_callback(callback_id, json);
+        self.plugin_manager
+            .read()
+            .unwrap()
+            .resolve_callback(callback_id, json);
     }
 
     fn handle_set_buffer_show_cursors(&mut self, buffer_id: BufferId, show: bool) {
@@ -3377,7 +3408,10 @@ impl Editor {
             .pop_front()
         {
             let json = serde_json::to_string(&payload).unwrap_or_else(|_| "null".to_string());
-            self.plugin_manager.resolve_callback(callback_id, json);
+            self.plugin_manager
+                .read()
+                .unwrap()
+                .resolve_callback(callback_id, json);
         } else {
             self.active_window_mut()
                 .pending_next_key_callbacks
@@ -3423,6 +3457,8 @@ impl Editor {
             });
         } else {
             self.plugin_manager
+                .read()
+                .unwrap()
                 .reject_callback(callback_id, "Async runtime not available".to_string());
         }
     }
@@ -3490,7 +3526,7 @@ impl Editor {
             "SpawnProcessWait not fully implemented - process_id={}",
             process_id
         );
-        self.plugin_manager.reject_callback(
+        self.plugin_manager.read().unwrap().reject_callback(
             callback_id,
             format!(
                 "SpawnProcessWait not yet fully implemented for process_id={}",
@@ -3515,6 +3551,8 @@ impl Editor {
         } else {
             std::thread::sleep(std::time::Duration::from_millis(duration_ms));
             self.plugin_manager
+                .read()
+                .unwrap()
                 .resolve_callback(callback_id, "null".to_string());
         }
     }
@@ -4105,8 +4143,13 @@ impl Editor {
             }
             _ => return,
         };
-        if self.plugin_manager.has_hook_handlers("widget_event") {
-            self.plugin_manager.run_hook(
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("widget_event")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
                 "widget_event",
                 fresh_core::hooks::HookArgs::WidgetEvent {
                     panel_id,
@@ -4147,8 +4190,13 @@ impl Editor {
             return;
         }
         let item_key = item_keys.get(sel as usize).cloned().unwrap_or_default();
-        if self.plugin_manager.has_hook_handlers("widget_event") {
-            self.plugin_manager.run_hook(
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("widget_event")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
                 "widget_event",
                 fresh_core::hooks::HookArgs::WidgetEvent {
                     panel_id,
@@ -4218,8 +4266,13 @@ impl Editor {
         }
         // Re-render so the new selection's bg paints.
         self.rerender_widget_panel(panel_id);
-        if self.plugin_manager.has_hook_handlers("widget_event") {
-            self.plugin_manager.run_hook(
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("widget_event")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
                 "widget_event",
                 fresh_core::hooks::HookArgs::WidgetEvent {
                     panel_id,
@@ -4302,8 +4355,13 @@ impl Editor {
             );
         }
         self.rerender_widget_panel(panel_id);
-        if self.plugin_manager.has_hook_handlers("widget_event") {
-            self.plugin_manager.run_hook(
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("widget_event")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
                 "widget_event",
                 fresh_core::hooks::HookArgs::WidgetEvent {
                     panel_id,
@@ -4556,9 +4614,14 @@ impl Editor {
             );
         }
         self.rerender_widget_panel(panel_id);
-        if self.plugin_manager.has_hook_handlers("widget_event") {
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("widget_event")
+        {
             if let Some(now_expanded) = expansion_changed {
-                self.plugin_manager.run_hook(
+                self.plugin_manager.read().unwrap().run_hook(
                     "widget_event",
                     fresh_core::hooks::HookArgs::WidgetEvent {
                         panel_id,
@@ -4572,7 +4635,7 @@ impl Editor {
                     },
                 );
             } else if new_sel != cur_sel {
-                self.plugin_manager.run_hook(
+                self.plugin_manager.read().unwrap().run_hook(
                     "widget_event",
                     fresh_core::hooks::HookArgs::WidgetEvent {
                         panel_id,
@@ -4631,8 +4694,13 @@ impl Editor {
             next
         };
         self.rerender_widget_panel(panel_id);
-        if self.plugin_manager.has_hook_handlers("widget_event") {
-            self.plugin_manager.run_hook(
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("widget_event")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
                 "widget_event",
                 fresh_core::hooks::HookArgs::WidgetEvent {
                     panel_id,
@@ -4694,8 +4762,13 @@ impl Editor {
         };
         let new_checked = !cur_checked;
         let item_key = item_keys.get(sel as usize).cloned().unwrap_or_default();
-        if self.plugin_manager.has_hook_handlers("widget_event") {
-            self.plugin_manager.run_hook(
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("widget_event")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
                 "widget_event",
                 fresh_core::hooks::HookArgs::WidgetEvent {
                     panel_id,
@@ -4736,8 +4809,13 @@ impl Editor {
             return;
         }
         let item_key = item_keys.get(sel as usize).cloned().unwrap_or_default();
-        if self.plugin_manager.has_hook_handlers("widget_event") {
-            self.plugin_manager.run_hook(
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("widget_event")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
                 "widget_event",
                 fresh_core::hooks::HookArgs::WidgetEvent {
                     panel_id,
@@ -4838,8 +4916,13 @@ impl Editor {
             );
         }
         self.rerender_widget_panel(panel_id);
-        if self.plugin_manager.has_hook_handlers("widget_event") {
-            self.plugin_manager.run_hook(
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("widget_event")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
                 "widget_event",
                 fresh_core::hooks::HookArgs::WidgetEvent {
                     panel_id,
@@ -5114,6 +5197,8 @@ impl Editor {
                 if let Some(req_id) = request_id {
                     let json = serde_json::to_string(&result).unwrap_or_default();
                     self.plugin_manager
+                        .read()
+                        .unwrap()
                         .resolve_callback(fresh_core::api::JsCallbackId::from(req_id), json);
                 }
             }

@@ -248,7 +248,7 @@ impl Editor {
 
     /// Handle terminal focus gained event
     pub fn focus_gained(&mut self) {
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "focus_gained",
             crate::services::plugins::hooks::HookArgs::FocusGained {},
         );
@@ -275,7 +275,7 @@ impl Editor {
         self.resize_visible_terminals();
 
         // Notify plugins of the resize so they can adjust layouts
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "resize",
             fresh_core::hooks::HookArgs::Resize { width, height },
         );

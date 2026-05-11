@@ -95,7 +95,7 @@ impl Editor {
             .is_lsp_language_user_dismissed(&language);
 
         // Fire the LspStatusClicked hook for plugins
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "lsp_status_clicked",
             crate::services::plugins::hooks::HookArgs::LspStatusClicked {
                 language: language.clone(),

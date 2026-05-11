@@ -1293,6 +1293,8 @@ impl Editor {
             // Return just the buffer ID as a number (consistent with createVirtualBuffer)
             let result = buffer_id.0.to_string();
             self.plugin_manager
+                .read()
+                .unwrap()
                 .resolve_callback(fresh_core::api::JsCallbackId::from(req_id), result);
             tracing::info!(
                 "CreateCompositeBuffer: resolve_callback sent for request_id={}",

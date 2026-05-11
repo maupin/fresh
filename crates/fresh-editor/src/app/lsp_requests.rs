@@ -2069,7 +2069,7 @@ impl Editor {
         );
 
         // Fire the lsp_references hook so plugins can display the results
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "lsp_references",
             crate::services::plugins::hooks::HookArgs::LspReferences {
                 symbol: symbol.clone(),

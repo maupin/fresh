@@ -23,7 +23,7 @@ impl Editor {
     pub fn process_async_messages(&mut self) -> bool {
         // Check plugin thread health - will panic if thread died due to error
         // This ensures plugin errors surface quickly instead of causing silent hangs
-        self.plugin_manager.check_thread_health();
+        self.plugin_manager.write().unwrap().check_thread_health();
 
         let Some(bridge) = &self.async_bridge else {
             return false;
@@ -123,7 +123,7 @@ impl Editor {
                     .to_string();
 
                     // Fire the LspServerError hook for plugins
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "lsp_server_error",
                         crate::services::plugins::hooks::HookArgs::LspServerError {
                             language: language.clone(),
@@ -325,13 +325,13 @@ impl Editor {
                             );
                         }
                         PluginAsyncMessage::DelayComplete { callback_id } => {
-                            self.plugin_manager.resolve_callback(
+                            self.plugin_manager.read().unwrap().resolve_callback(
                                 JsCallbackId::from(callback_id),
                                 "null".to_string(),
                             );
                         }
                         PluginAsyncMessage::ProcessStdout { process_id, data } => {
-                            self.plugin_manager.run_hook(
+                            self.plugin_manager.read().unwrap().run_hook(
                                 "onProcessStdout",
                                 crate::services::plugins::hooks::HookArgs::ProcessOutput {
                                     process_id,
@@ -340,7 +340,7 @@ impl Editor {
                             );
                         }
                         PluginAsyncMessage::ProcessStderr { process_id, data } => {
-                            self.plugin_manager.run_hook(
+                            self.plugin_manager.read().unwrap().run_hook(
                                 "onProcessStderr",
                                 crate::services::plugins::hooks::HookArgs::ProcessOutput {
                                     process_id,
@@ -358,7 +358,7 @@ impl Editor {
                                 process_id,
                                 exit_code,
                             };
-                            self.plugin_manager.resolve_callback(
+                            self.plugin_manager.read().unwrap().resolve_callback(
                                 JsCallbackId::from(callback_id),
                                 serde_json::to_string(&result).unwrap(),
                             );
@@ -451,7 +451,7 @@ impl Editor {
                         .get(terminal_id)
                         .and_then(|handle| handle.state.lock().ok().map(|s| s.last_visible_line()))
                         .unwrap_or_default();
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "terminal_output",
                         crate::services::plugins::hooks::HookArgs::TerminalOutput {
                             terminal_id: terminal_id.0 as u64,
@@ -461,7 +461,7 @@ impl Editor {
                 }
                 AsyncMessage::PathChanged { handle, path, kind } => {
                     self.last_path_change_for_test = Some((handle, path.clone(), kind.as_str()));
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "path_changed",
                         crate::services::plugins::hooks::HookArgs::PathChanged {
                             handle,
@@ -545,7 +545,7 @@ impl Editor {
                     // to transition agents to READY (code 0) or ERRORED.
                     // `exit_code` is currently always `None` here; full
                     // wait-status capture is a follow-up commit.
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "terminal_exit",
                         crate::services::plugins::hooks::HookArgs::TerminalExited {
                             terminal_id: terminal_id.0 as u64,
@@ -647,6 +647,8 @@ impl Editor {
                     #[cfg(feature = "plugins")]
                     for cb_id in callback_ids {
                         self.plugin_manager
+                            .read()
+                            .unwrap()
                             .resolve_callback(cb_id, "null".to_string());
                     }
 

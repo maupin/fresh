@@ -155,7 +155,7 @@ impl Editor {
 
         // Emit diagnostics_updated hook for plugins
         let count = merged.len();
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "diagnostics_updated",
             crate::services::plugins::hooks::HookArgs::DiagnosticsUpdated {
                 uri: uri.to_string(),
@@ -1198,7 +1198,7 @@ impl Editor {
         let params_str = params.map(|p| p.to_string());
 
         // Run the lsp_server_request hook for plugins
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "lsp_server_request",
             crate::services::plugins::hooks::HookArgs::LspServerRequest {
                 language,
@@ -1221,10 +1221,15 @@ impl Editor {
         match result {
             Ok(value) => {
                 self.plugin_manager
+                    .read()
+                    .unwrap()
                     .resolve_callback(callback_id, value.to_string());
             }
             Err(err) => {
-                self.plugin_manager.reject_callback(callback_id, err);
+                self.plugin_manager
+                    .read()
+                    .unwrap()
+                    .reject_callback(callback_id, err);
             }
         }
     }
@@ -1426,6 +1431,8 @@ impl Editor {
             exit_code,
         };
         self.plugin_manager
+            .read()
+            .unwrap()
             .resolve_callback(callback_id, serde_json::to_string(&result).unwrap());
     }
 
@@ -1434,7 +1441,7 @@ impl Editor {
     /// Returns true if any visual commands were processed (i.e. a re-render is needed).
     /// No-op sentinels like `HookCompleted` do not count.
     pub(super) fn process_plugin_commands(&mut self) -> bool {
-        let commands = self.plugin_manager.process_commands();
+        let commands = self.plugin_manager.write().unwrap().process_commands();
         if commands.is_empty() {
             return false;
         }

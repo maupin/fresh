@@ -695,7 +695,7 @@ impl Editor {
                 PromptType::Plugin { custom_type } => {
                     // Fire plugin hook for prompt cancellation
                     use crate::services::plugins::hooks::HookArgs;
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "prompt_cancelled",
                         HookArgs::PromptCancelled {
                             prompt_type: custom_type.clone(),
@@ -776,6 +776,8 @@ impl Editor {
                         .take()
                     {
                         self.plugin_manager
+                            .read()
+                            .unwrap()
                             .resolve_callback(callback_id, "null".to_string());
                     }
                 }
@@ -1061,14 +1063,18 @@ impl Editor {
         &self.command_registry
     }
 
-    /// Get access to the plugin manager
-    pub fn plugin_manager(&self) -> &PluginManager {
-        &self.plugin_manager
+    /// Get access to the plugin manager (read lock).
+    ///
+    /// Callers should use `editor.plugin_manager()` instead of locking
+    /// directly so they're decoupled from the field's `Arc<RwLock<>>`
+    /// internals.
+    pub fn plugin_manager(&self) -> std::sync::RwLockReadGuard<'_, PluginManager> {
+        self.plugin_manager.read().unwrap()
     }
 
-    /// Get mutable access to the plugin manager
-    pub fn plugin_manager_mut(&mut self) -> &mut PluginManager {
-        &mut self.plugin_manager
+    /// Mutable access to the plugin manager (write lock).
+    pub fn plugin_manager_mut(&mut self) -> std::sync::RwLockWriteGuard<'_, PluginManager> {
+        self.plugin_manager.write().unwrap()
     }
 
     /// Check if file explorer has focus
@@ -1180,7 +1186,7 @@ impl Editor {
                 }
                 // Fire plugin hook for prompt input change
                 use crate::services::plugins::hooks::HookArgs;
-                self.plugin_manager.run_hook(
+                self.plugin_manager.read().unwrap().run_hook(
                     "prompt_changed",
                     HookArgs::PromptChanged {
                         prompt_type: custom_type,

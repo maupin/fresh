@@ -1842,7 +1842,7 @@ impl Editor {
         // Fire the prompt_changed hook immediately with empty input
         // This allows plugins to initialize the prompt state
         use crate::services::plugins::hooks::HookArgs;
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "prompt_changed",
             HookArgs::PromptChanged {
                 prompt_type: prompt_type.clone(),
@@ -1877,7 +1877,7 @@ impl Editor {
 
         // Fire the prompt_changed hook immediately with the initial value
         use crate::services::plugins::hooks::HookArgs;
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "prompt_changed",
             HookArgs::PromptChanged {
                 prompt_type: prompt_type.clone(),
@@ -1906,7 +1906,7 @@ impl Editor {
 
         // Fire the prompt_changed hook
         use crate::services::plugins::hooks::HookArgs;
-        self.plugin_manager.run_hook(
+        self.plugin_manager.read().unwrap().run_hook(
             "prompt_changed",
             HookArgs::PromptChanged {
                 prompt_type: "async_prompt".to_string(),
@@ -2073,7 +2073,9 @@ impl Editor {
         // Update keybinding labels in plugin state snapshot for getKeybindingLabel API
         #[cfg(feature = "plugins")]
         {
-            if let Some(snapshot_handle) = self.plugin_manager.state_snapshot_handle() {
+            if let Some(snapshot_handle) =
+                self.plugin_manager.read().unwrap().state_snapshot_handle()
+            {
                 if let Ok(mut snapshot) = snapshot_handle.write() {
                     // Remove old labels for this mode
                     snapshot
@@ -2142,6 +2144,8 @@ impl Editor {
         };
         if let Some(err_msg) = error {
             self.plugin_manager
+                .read()
+                .unwrap()
                 .reject_callback(fresh_core::api::JsCallbackId::from(request_id), err_msg);
         }
     }
@@ -2371,6 +2375,8 @@ impl Editor {
             #[cfg(feature = "plugins")]
             for cb_id in self.pending_grammar_callbacks.drain(..) {
                 self.plugin_manager
+                    .read()
+                    .unwrap()
                     .resolve_callback(cb_id, "null".to_string());
             }
             #[cfg(not(feature = "plugins"))]
@@ -2466,7 +2472,10 @@ impl Editor {
         if pattern.is_empty() {
             let json = serde_json::to_string(&Vec::<GrepMatch>::new())
                 .unwrap_or_else(|_| "[]".to_string());
-            self.plugin_manager.resolve_callback(callback_id, json);
+            self.plugin_manager
+                .read()
+                .unwrap()
+                .resolve_callback(callback_id, json);
             return;
         }
 
@@ -2478,6 +2487,8 @@ impl Editor {
             Ok(re) => re,
             Err(e) => {
                 self.plugin_manager
+                    .read()
+                    .unwrap()
                     .reject_callback(callback_id, format!("Invalid regex: {}", e));
                 return;
             }
@@ -2591,7 +2602,10 @@ impl Editor {
         }
 
         let json = serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string());
-        self.plugin_manager.resolve_callback(callback_id, json);
+        self.plugin_manager
+            .read()
+            .unwrap()
+            .resolve_callback(callback_id, json);
     }
 
     // ==================== Pull-Based Streaming Search ====================
@@ -2616,7 +2630,7 @@ impl Editor {
         // Look up the handle the plugin pre-registered. If it's missing
         // (registry races with a unit test), drop the request — there's no
         // observer to deliver results to.
-        let Some(registry) = self.plugin_manager.search_handles_handle() else {
+        let Some(registry) = self.plugin_manager.read().unwrap().search_handles_handle() else {
             return;
         };
         let entry = match registry.lock() {
@@ -2900,7 +2914,10 @@ impl Editor {
                 buffer_id: 0,
             };
             let json = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
-            self.plugin_manager.resolve_callback(callback_id, json);
+            self.plugin_manager
+                .read()
+                .unwrap()
+                .resolve_callback(callback_id, json);
             return;
         }
 
@@ -2940,7 +2957,7 @@ impl Editor {
                     bid
                 }
                 Err(e) => {
-                    self.plugin_manager.reject_callback(
+                    self.plugin_manager.read().unwrap().reject_callback(
                         callback_id,
                         format!("Failed to open file {:?}: {}", file_path, e),
                     );
@@ -3034,7 +3051,7 @@ impl Editor {
             // wiping the event log we're about to append (see bug #1).
             if let Some(path) = state.buffer.file_path().map(|p| p.to_path_buf()) {
                 if let Err(e) = state.buffer.save_to_file(&path) {
-                    self.plugin_manager.reject_callback(
+                    self.plugin_manager.read().unwrap().reject_callback(
                         callback_id,
                         format!("Failed to save file {:?}: {}", path, e),
                     );
@@ -3111,7 +3128,10 @@ impl Editor {
             buffer_id: buffer_id.0,
         };
         let json = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
-        self.plugin_manager.resolve_callback(callback_id, json);
+        self.plugin_manager
+            .read()
+            .unwrap()
+            .resolve_callback(callback_id, json);
     }
 
     /// Handle StartAnimationArea: translate the plugin description into an

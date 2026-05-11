@@ -698,7 +698,8 @@ impl Editor {
                 // Plugin was disabled, now enabled - load it
                 if let Some(ref path) = path {
                     tracing::info!("Loading newly enabled plugin: {}", name);
-                    if let Err(e) = self.plugin_manager.load_plugin(path) {
+                    let load_result = self.plugin_manager.read().unwrap().load_plugin(path);
+                    if let Err(e) = load_result {
                         tracing::error!("Failed to load plugin '{}': {}", name, e);
                         self.set_status_message(format!("Failed to load plugin '{}': {}", name, e));
                     }
@@ -706,7 +707,8 @@ impl Editor {
             } else {
                 // Plugin was enabled, now disabled - unload it
                 tracing::info!("Unloading disabled plugin: {}", name);
-                if let Err(e) = self.plugin_manager.unload_plugin(&name) {
+                let unload_result = self.plugin_manager.read().unwrap().unload_plugin(&name);
+                if let Err(e) = unload_result {
                     tracing::error!("Failed to unload plugin '{}': {}", name, e);
                     self.set_status_message(format!("Failed to unload plugin '{}': {}", name, e));
                 }

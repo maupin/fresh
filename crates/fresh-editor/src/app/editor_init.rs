@@ -150,7 +150,7 @@ pub(super) struct EditorParts {
     // Registries / managers
     pub(super) command_registry: Arc<RwLock<CommandRegistry>>,
     pub(super) quick_open_registry: QuickOpenRegistry,
-    pub(super) plugin_manager: PluginManager,
+    pub(super) plugin_manager: Arc<RwLock<PluginManager>>,
     pub(super) recovery_service: RecoveryService,
     pub(super) key_translator: crate::input::key_translator::KeyTranslator,
     pub(super) update_checker: Option<crate::services::release_checker::PeriodicUpdateChecker>,
@@ -708,18 +708,18 @@ impl Editor {
 
         t.phase("split_quickopen_authority");
         // Initialize plugin manager (handles both enabled and disabled cases internally)
-        let plugin_manager = PluginManager::new(
+        let plugin_manager = Arc::new(RwLock::new(PluginManager::new(
             enable_plugins,
             Arc::clone(&command_registry),
             dir_context.clone(),
             Arc::clone(&theme_cache),
-        );
+        )));
         t.phase("PluginManager::new");
 
         // Update the plugin state snapshot with working_dir BEFORE loading plugins
         // This ensures plugins can call getCwd() correctly during initialization
         #[cfg(feature = "plugins")]
-        if let Some(snapshot_handle) = plugin_manager.state_snapshot_handle() {
+        if let Some(snapshot_handle) = plugin_manager.read().unwrap().state_snapshot_handle() {
             let mut snapshot = snapshot_handle.write().unwrap();
             snapshot.working_dir = working_dir.clone();
             // Pre-populate keybinding labels for the static built-in
@@ -738,7 +738,7 @@ impl Editor {
         //    when embed-plugins feature is enabled)
         // 3. User plugins directory (~/.config/fresh/plugins)
         // 4. Package manager installed plugins (~/.config/fresh/plugins/packages/*)
-        if plugin_manager.is_active() {
+        if plugin_manager.read().unwrap().is_active() {
             let mut plugin_dirs: Vec<std::path::PathBuf> = vec![];
 
             // Check next to executable first (for cargo-dist installations)
@@ -836,13 +836,15 @@ impl Editor {
                             plugin_dir
                         );
                         if let Some(rx) = plugin_manager
+                            .read()
+                            .unwrap()
                             .load_plugins_from_dir_with_config_request(plugin_dir, &config.plugins)
                         {
                             dir_receivers.push((plugin_dir.clone(), rx));
                         }
                     }
                     let declarations_rx = if !dir_receivers.is_empty() {
-                        plugin_manager.list_plugins_request()
+                        plugin_manager.read().unwrap().list_plugins_request()
                     } else {
                         None
                     };
@@ -913,6 +915,8 @@ impl Editor {
                     tracing::info!("Loading TypeScript plugins from: {:?}", plugin_dir);
                     let load_start = std::time::Instant::now();
                     let (errors, discovered_plugins) = plugin_manager
+                        .read()
+                        .unwrap()
                         .load_plugins_from_dir_with_config(&plugin_dir, &config.plugins);
                     tracing::info!(
                         "Loaded TypeScript plugins from {:?} in {:?}",
@@ -947,7 +951,7 @@ impl Editor {
                 // that uses `declare global { interface FreshPluginRegistry }`
                 // contributes its augmentation, and init.ts's tsconfig
                 // picks the aggregate up via `files`.
-                let declarations = plugin_manager.plugin_declarations();
+                let declarations = plugin_manager.read().unwrap().plugin_declarations();
                 crate::init_script::write_plugin_declarations(
                     &dir_context.config_dir,
                     &declarations,
@@ -1029,6 +1033,7 @@ impl Editor {
             dir_context: dir_context.clone(),
             tokio_runtime: tokio_runtime.clone(),
             async_bridge: Some(async_bridge.clone()),
+            plugin_manager: Arc::clone(&plugin_manager),
         };
 
         // Build the active window — the one that holds the seed
@@ -1103,6 +1108,7 @@ impl Editor {
                     dir_context: dir_context.clone(),
                     tokio_runtime: tokio_runtime.clone(),
                     async_bridge: Some(async_bridge.clone()),
+                    plugin_manager: Arc::clone(&plugin_manager),
                 };
                 let mut shell = crate::app::window::Window::new(
                     id,
@@ -1206,8 +1212,8 @@ impl Editor {
         #[cfg(feature = "plugins")]
         {
             editor.update_plugin_state_snapshot();
-            if editor.plugin_manager.is_active() {
-                editor.plugin_manager.run_hook(
+            if editor.plugin_manager.read().unwrap().is_active() {
+                editor.plugin_manager.read().unwrap().run_hook(
                     "editor_initialized",
                     crate::services::plugins::hooks::HookArgs::EditorInitialized {},
                 );
@@ -1310,13 +1316,13 @@ impl Editor {
         let outcome = match decide_load(&config_dir, enabled) {
             LoadDecision::Skip(outcome) => outcome,
             LoadDecision::Load { source } => {
-                if !self.plugin_manager.is_active() {
+                if !self.plugin_manager.read().unwrap().is_active() {
                     InitOutcome::Failed {
                         message: "plugin runtime inactive (--no-plugins); init.ts cannot run"
                             .into(),
                     }
                 } else {
-                    match self.plugin_manager.load_plugin_from_source(
+                    match self.plugin_manager.read().unwrap().load_plugin_from_source(
                         &source,
                         crate::init_script::INIT_PLUGIN_NAME,
                         true,
@@ -1395,7 +1401,7 @@ impl Editor {
                 InitOutcome::Failed { message } => PluginInitScriptOutcome::Failed { message },
             }),
             LoadDecision::Load { source } => {
-                if !self.plugin_manager.is_active() {
+                if !self.plugin_manager.read().unwrap().is_active() {
                     Some(PluginInitScriptOutcome::Failed {
                         message: "plugin runtime inactive (--no-plugins); init.ts cannot run"
                             .into(),
@@ -1426,11 +1432,12 @@ impl Editor {
         let Some(bridge) = &self.async_bridge else {
             return;
         };
-        let Some(rx) = self.plugin_manager.load_plugin_from_source_request(
-            &source,
-            crate::init_script::INIT_PLUGIN_NAME,
-            true,
-        ) else {
+        let Some(rx) = self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .load_plugin_from_source_request(&source, crate::init_script::INIT_PLUGIN_NAME, true)
+        else {
             return;
         };
         let sender = bridge.sender();
@@ -1565,8 +1572,8 @@ impl Editor {
     /// Fire the `plugins_loaded` hook (design M2, §3.3 phase 2).
     pub fn fire_plugins_loaded_hook(&self) {
         #[cfg(feature = "plugins")]
-        if self.plugin_manager.is_active() {
-            self.plugin_manager.run_hook(
+        if self.plugin_manager.read().unwrap().is_active() {
+            self.plugin_manager.read().unwrap().run_hook(
                 "plugins_loaded",
                 crate::services::plugins::hooks::HookArgs::PluginsLoaded {},
             );
@@ -1576,8 +1583,10 @@ impl Editor {
     /// Fire the `ready` hook (design M2, §3.3 phase 3).
     pub fn fire_ready_hook(&self) {
         #[cfg(feature = "plugins")]
-        if self.plugin_manager.is_active() {
+        if self.plugin_manager.read().unwrap().is_active() {
             self.plugin_manager
+                .read()
+                .unwrap()
                 .run_hook("ready", crate::services::plugins::hooks::HookArgs::Ready {});
         }
     }
@@ -1651,7 +1660,7 @@ impl Editor {
     /// adding refresh hooks to every keymap-mutation site.
     #[cfg(feature = "plugins")]
     pub(crate) fn refresh_keybinding_labels_snapshot(&self) {
-        if let Some(snapshot_handle) = self.plugin_manager.state_snapshot_handle() {
+        if let Some(snapshot_handle) = self.plugin_manager.read().unwrap().state_snapshot_handle() {
             if let Ok(mut snapshot) = snapshot_handle.write() {
                 populate_builtin_keybinding_labels(&mut snapshot, &self.keybindings);
             }

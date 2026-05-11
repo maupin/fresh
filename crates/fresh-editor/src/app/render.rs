@@ -353,7 +353,7 @@ impl Editor {
         // This allows plugins to add overlays before rendering
         // Only lines that haven't been seen before are sent (batched for efficiency)
         // Use non-blocking hooks to avoid deadlock when actions are awaiting
-        if self.plugin_manager.is_active() {
+        if self.plugin_manager.read().unwrap().is_active() {
             let hooks_start = std::time::Instant::now();
             // Get visible buffers and their areas
             let visible_buffers = self
@@ -384,7 +384,7 @@ impl Editor {
                     .expect("active window must exist");
                 if let Some(state) = __win.buffers.get_mut(&buffer_id) {
                     // Fire render_start hook once per buffer
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "render_start",
                         crate::services::plugins::hooks::HookArgs::RenderStart { buffer_id },
                     );
@@ -417,7 +417,7 @@ impl Editor {
                         .get(&split_id)
                         .map(|vs| vs.cursors.iter().map(|(_, c)| c.position).collect())
                         .unwrap_or_default();
-                    self.plugin_manager.run_hook(
+                    self.plugin_manager.read().unwrap().run_hook(
                         "view_transform_request",
                         crate::services::plugins::hooks::HookArgs::ViewTransformRequest {
                             buffer_id,
@@ -477,7 +477,7 @@ impl Editor {
                     // Send batched hook if there are new lines
                     if !new_lines.is_empty() {
                         total_new_lines += new_lines.len();
-                        self.plugin_manager.run_hook(
+                        self.plugin_manager.read().unwrap().run_hook(
                             "lines_changed",
                             crate::services::plugins::hooks::HookArgs::LinesChanged {
                                 buffer_id,
@@ -506,7 +506,7 @@ impl Editor {
             // load), the response arrives one frame late, which is imperceptible
             // at 60fps. The plugin's own refreshLines() call from cursor_moved
             // ensures a follow-up render cycle picks up any missed commands.
-            let commands = self.plugin_manager.process_commands();
+            let commands = self.plugin_manager.write().unwrap().process_commands();
             let dispatched_any = !commands.is_empty();
             if dispatched_any {
                 let cmd_names: Vec<String> =
@@ -756,7 +756,7 @@ impl Editor {
         // Detect viewport changes and fire hooks
         // Compare against previous frame's viewport state (stored in self.active_window().previous_viewports)
         // This correctly detects changes from scroll events that happen before render()
-        if self.plugin_manager.is_active() {
+        if self.plugin_manager.read().unwrap().is_active() {
             for (split_id, view_state) in self
                 .windows
                 .get(&self.active_window)
@@ -815,7 +815,7 @@ impl Editor {
                             view_state.viewport.top_byte,
                             top_line
                         );
-                        self.plugin_manager.run_hook(
+                        self.plugin_manager.read().unwrap().run_hook(
                             "viewport_changed",
                             crate::services::plugins::hooks::HookArgs::ViewportChanged {
                                 split_id: (*split_id).into(),

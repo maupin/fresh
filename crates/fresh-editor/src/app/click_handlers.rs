@@ -362,8 +362,14 @@ impl Editor {
                         handled_specially = true;
                     }
                 }
-                if !handled_specially && self.plugin_manager.has_hook_handlers("widget_event") {
-                    self.plugin_manager.run_hook(
+                if !handled_specially
+                    && self
+                        .plugin_manager
+                        .read()
+                        .unwrap()
+                        .has_hook_handlers("widget_event")
+                {
+                    self.plugin_manager.read().unwrap().run_hook(
                         "widget_event",
                         HookArgs::WidgetEvent {
                             panel_id,
@@ -378,8 +384,13 @@ impl Editor {
 
         // Dispatch MouseClick hook to plugins
         // Plugins can handle clicks on their virtual buffers
-        if self.plugin_manager.has_hook_handlers("mouse_click") {
-            self.plugin_manager.run_hook(
+        if self
+            .plugin_manager
+            .read()
+            .unwrap()
+            .has_hook_handlers("mouse_click")
+        {
+            self.plugin_manager.read().unwrap().run_hook(
                 "mouse_click",
                 HookArgs::MouseClick {
                     column: col,
