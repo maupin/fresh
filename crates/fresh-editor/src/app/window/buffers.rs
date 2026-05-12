@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use crate::model::event::LeafId;
 use crate::state::EditorState;
-use crate::view::split::{BufferViewState, SplitManager, SplitViewState};
+use crate::view::split::{SplitManager, SplitViewState};
 
 type Splits = (SplitManager, HashMap<LeafId, SplitViewState>);
 
@@ -199,78 +199,6 @@ impl WindowBuffers {
         let state = self.map.get_mut(&buf)?;
         let (_, vs_map) = self.splits.as_mut()?;
         Some(f(state, vs_map))
-    }
-
-    /// Run `f` with the buffer state and `buf`'s keyed
-    /// `BufferViewState` inside the named split. For buffer-group
-    /// panel cursor mutations that target the keyed state rather
-    /// than the split's primary cursor.
-    pub fn with_buffer_and_split_keyed<F, R>(
-        &mut self,
-        buf: BufferId,
-        split: LeafId,
-        f: F,
-    ) -> Option<R>
-    where
-        F: FnOnce(&mut EditorState, &mut BufferViewState) -> R,
-    {
-        let state = self.map.get_mut(&buf)?;
-        let (_, vs_map) = self.splits.as_mut()?;
-        let vs = vs_map.get_mut(&split)?;
-        let keyed = vs.keyed_states.get_mut(&buf)?;
-        Some(f(state, keyed))
-    }
-
-    /// Run `f` with the named split's view state (mutable) and a
-    /// read-only handle to the buffer map. Used by tab-layout and
-    /// scrollbar code that walks every buffer's metadata while
-    /// mutating one split's tab-scroll offset.
-    pub fn with_split_and_buffer_map<F, R>(&mut self, split: LeafId, f: F) -> Option<R>
-    where
-        F: FnOnce(&mut SplitViewState, &HashMap<BufferId, EditorState>) -> R,
-    {
-        // Disjoint borrows on the two struct fields.
-        let buffer_map = &self.map;
-        let (_, vs_map) = self.splits.as_mut()?;
-        let vs = vs_map.get_mut(&split)?;
-        Some(f(vs, buffer_map))
-    }
-
-    /// Run `f` with a single split's view state and the full buffer
-    /// map, both mutable. The big-hammer for workspace-restore-style
-    /// flows that need to add buffers while configuring tabs/cursors
-    /// on a specific split. Closure scope bounds the joint borrow.
-    pub fn with_split_and_buffer_map_mut<F, R>(&mut self, split: LeafId, f: F) -> Option<R>
-    where
-        F: FnOnce(&mut SplitViewState, &mut HashMap<BufferId, EditorState>) -> R,
-    {
-        let buffer_map = &mut self.map;
-        let (_, vs_map) = self.splits.as_mut()?;
-        let vs = vs_map.get_mut(&split)?;
-        Some(f(vs, buffer_map))
-    }
-
-    /// Run `f` with a buffer state (mutable) and a read-only view of
-    /// the named split, if present. The status-bar render needs
-    /// `&mut state` plus the split's cursor positions to build its
-    /// context — splitting the access this way keeps the keyspace
-    /// invariant intact (the closure can't insert / remove buffers
-    /// while it holds the split ref).
-    pub fn with_buffer_mut_and_split_ref<F, R>(
-        &mut self,
-        buf: BufferId,
-        split: LeafId,
-        f: F,
-    ) -> Option<R>
-    where
-        F: FnOnce(&mut EditorState, Option<&SplitViewState>) -> R,
-    {
-        let state = self.map.get_mut(&buf)?;
-        let vs = self
-            .splits
-            .as_ref()
-            .and_then(|(_, vs_map)| vs_map.get(&split));
-        Some(f(state, vs))
     }
 
     /// Run `f` with mutable refs to the buffer map, the split

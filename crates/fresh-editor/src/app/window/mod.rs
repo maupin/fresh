@@ -1064,8 +1064,10 @@ impl Window {
         event: &crate::model::event::Event,
     ) {
         self.buffers
-            .with_buffer_and_split_keyed(buffer_id, split_id, |state, keyed| {
-                state.apply(&mut keyed.cursors, event);
+            .with_buffer_and_split(buffer_id, split_id, |state, vs| {
+                if let Some(keyed) = vs.keyed_states.get_mut(&buffer_id) {
+                    state.apply(&mut keyed.cursors, event);
+                }
             });
     }
 
@@ -1238,7 +1240,10 @@ impl Window {
         file_state: &crate::workspace::SerializedFileState,
     ) {
         self.buffers
-            .with_buffer_and_split_keyed(buffer_id, split_id, |buffer_state, buf_state| {
+            .with_buffer_and_split(buffer_id, split_id, |buffer_state, vs| {
+                let Some(buf_state) = vs.keyed_states.get_mut(&buffer_id) else {
+                    return;
+                };
                 let max_pos = buffer_state.buffer.len();
                 let cursor_pos = file_state.cursor.position.min(max_pos);
                 buf_state.cursors.primary_mut().position = cursor_pos;

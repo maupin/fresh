@@ -1028,8 +1028,11 @@ impl Editor {
                 .expect("active window must exist");
             let status_bar_layout = __win
                 .buffers
-                .with_buffer_mut_and_split_ref(active_buf, active_split, |state, vs| {
-                    let cursors = vs.map(|v| &v.cursors).unwrap_or(&default_cursors);
+                .with_buffer_and_view_states(active_buf, |state, vs_map| {
+                    let cursors = vs_map
+                        .get(&active_split)
+                        .map(|v| &v.cursors)
+                        .unwrap_or(&default_cursors);
                     let mut status_ctx = crate::view::ui::status_bar::StatusBarContext {
                         state,
                         cursors,

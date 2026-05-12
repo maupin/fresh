@@ -1740,7 +1740,10 @@ impl Editor {
             .get_mut(&active_id)
             .expect("active window must exist")
             .buffers
-            .with_split_and_buffer_map_mut(current_split_id, |view_state, __buffers_mut| {
+            .with_all_mut(|__buffers_mut, _mgr, vs_map| {
+        let Some(view_state) = vs_map.get_mut(&current_split_id) else {
+            return None;
+        };
         let mut active_buffer_id: Option<BufferId> = None;
         if !split_state.open_tabs.is_empty() {
             // Clear pre-existing open_buffers (e.g. the initial empty buffer

@@ -44,7 +44,10 @@ impl crate::app::window::Window {
         let composites = &self.composite_buffers;
 
         self.buffers
-            .with_split_and_buffer_map(split_id, |view_state, buffer_map| {
+            .with_all_mut(|buffer_map, _mgr, vs_map| {
+                let Some(view_state) = vs_map.get_mut(&split_id) else {
+                    return;
+                };
                 let split_buffers = view_state.open_buffers.clone();
                 let (tab_widths, rendered_targets) = crate::view::ui::tabs::calculate_tab_widths(
                     &split_buffers,
