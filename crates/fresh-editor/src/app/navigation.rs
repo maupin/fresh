@@ -171,8 +171,71 @@ impl crate::app::window::Window {
                     view_state.viewport.scrolled_up_in_wrap = false;
                     view_state.viewport.set_skip_ensure_visible();
                 }
+
+                // 4. Horizontal scroll. The byte-oriented `ensure_cursor_visible`
+                // doesn't adjust `left_column`; for matches deep inside a long
+                // line (an EPUB XML element, a minified bundle, …) the cursor
+                // is on the right line but its column is past the viewport —
+                // the user sees an unchanged screen and has to scroll
+                // horizontally manually. See §5 of
+                // docs/internal/search-replace-scope-replan-on-widgets.md
+                // and #1873.
+                //
+                // Skip when line wrapping is on (every column reaches the eye
+                // via wrap) and when the gutter/scrollbar reservation leaves
+                // no usable visible width.
+                if !view_state.viewport.line_wrap_enabled {
+                    let cursor_visual_col = visual_column_of(&mut state.buffer, cursor_pos);
+                    let gutter_width = if view_state.show_line_numbers { 6 } else { 0 };
+                    let scrollbar_width = 1;
+                    let visible_width = (view_state.viewport.width as usize)
+                        .saturating_sub(gutter_width)
+                        .saturating_sub(scrollbar_width);
+                    if visible_width > 0 {
+                        let left = view_state.viewport.left_column;
+                        let right = left + visible_width;
+                        // Small margin so the cursor isn't pinned to the very
+                        // edge — mirrors `ensure_column_visible_simple`'s
+                        // `effective_offset` behaviour.
+                        let margin = (visible_width / 8).min(8);
+                        if cursor_visual_col < left + margin {
+                            view_state.viewport.left_column =
+                                cursor_visual_col.saturating_sub(margin);
+                        } else if cursor_visual_col + margin >= right {
+                            view_state.viewport.left_column =
+                                (cursor_visual_col + margin + 1).saturating_sub(visible_width);
+                        }
+                    }
+                }
             });
     }
+}
+
+/// Visual column for `cursor_pos` on its source line. Best-effort:
+/// counts terminal cell widths via `UnicodeWidthChar` (matching what
+/// the layout-aware viewport math uses). Tabs collapse to 1 since
+/// this layer doesn't have the buffer's tab-width setting handy.
+fn visual_column_of(buffer: &mut crate::model::buffer::Buffer, cursor_pos: usize) -> usize {
+    use unicode_width::UnicodeWidthChar;
+    let cursor_line = buffer.get_line_number(cursor_pos);
+    let line_start = buffer.line_start_offset(cursor_line).unwrap_or(cursor_pos);
+    if cursor_pos <= line_start {
+        return 0;
+    }
+    let len = cursor_pos - line_start;
+    let bytes = match buffer.get_text_range_mut(line_start, len) {
+        Ok(b) => b,
+        Err(_) => return 0,
+    };
+    let s = match std::str::from_utf8(&bytes) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let mut col = 0usize;
+    for ch in s.chars() {
+        col += UnicodeWidthChar::width(ch).unwrap_or(0);
+    }
+    col
 }
 
 /// Approximate visibility check using line numbers. False negatives only —
