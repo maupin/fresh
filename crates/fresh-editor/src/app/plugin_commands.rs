@@ -1485,9 +1485,9 @@ impl Editor {
 
     /// Handle MoveTabLeft command - move active tab left in its split
     pub(super) fn handle_move_tab_left(&mut self) {
-        let split_id = self.split_manager.active_split();
-        if let Some(buffer_id) = self.split_manager.get_buffer_id(split_id.into()) {
-            if let Some(view_state) = self.split_view_states.get_mut(&split_id) {
+        let split_id = self.split_manager().active_split();
+        if let Some(buffer_id) = self.split_manager().get_buffer_id(split_id.into()) {
+            if let Some(view_state) = self.split_view_states_mut().get_mut(&split_id) {
                 use crate::view::split::TabTarget;
                 if let Some(current_idx) = view_state
                     .open_buffers
@@ -1506,9 +1506,9 @@ impl Editor {
 
     /// Handle MoveTabRight command - move active tab right in its split
     pub(super) fn handle_move_tab_right(&mut self) {
-        let split_id = self.split_manager.active_split();
-        if let Some(buffer_id) = self.split_manager.get_buffer_id(split_id.into()) {
-            if let Some(view_state) = self.split_view_states.get_mut(&split_id) {
+        let split_id = self.split_manager().active_split();
+        if let Some(buffer_id) = self.split_manager().get_buffer_id(split_id.into()) {
+            if let Some(view_state) = self.split_view_states_mut().get_mut(&split_id) {
                 use crate::view::split::TabTarget;
                 if let Some(current_idx) = view_state
                     .open_buffers
