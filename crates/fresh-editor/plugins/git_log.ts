@@ -148,14 +148,14 @@ function git_log_select_page_up(): void {
   if (isLogPanelActive()) {
     state.logPanel?.command(key("PageUp"));
   } else {
-    editor.executeAction("page_up");
+    editor.executeAction("move_page_up");
   }
 }
 function git_log_select_page_down(): void {
   if (isLogPanelActive()) {
     state.logPanel?.command(key("PageDown"));
   } else {
-    editor.executeAction("page_down");
+    editor.executeAction("move_page_down");
   }
 }
 
