@@ -58,8 +58,6 @@ function getKindLabel(kind: number): string {
 let cachedBufferId: number | null = null;
 let cachedFilePath: string = "";
 let cachedLanguage: string | undefined = undefined;
-let cachedCursorPosition = 0;
-
 async function navigateToSymbol(bufferId: number, sym: SymbolItem): Promise<void> {
   if (bufferId === null) return;
 
@@ -97,21 +95,17 @@ function format(sym: SymbolItem): DisplayEntry {
   return {
     label: `[${getKindLabel(sym.kind)}] ${sym.name}`,
     description: `line ${sym.startLine + 1}`,
+    location: cachedFilePath !== ""
+      ? { file: cachedFilePath, line: sym.startLine + 1, column: sym.startCharacter + 1, endLine: sym.endLine + 1 }
+      : undefined,
   }
 };
 
 const finder = new Finder(editor, {
   id: "lsp_symbols",
-  preview: false,
   format,
   onSelect: async (sym) => {
     await navigateToSymbol(cachedBufferId, sym);
-  },
-  onSelectionChanged: async (sym) => {
-    await navigateToSymbol(cachedBufferId, sym);
-  },
-  onClose: () => {
-    editor.setBufferCursor(cachedBufferId, cachedCursorPosition);
   },
 });
 
@@ -150,8 +144,6 @@ async function openSymbolsListHandler(): Promise<void> {
   if (!cachedFilePath) {
     return;
   }
-
-  cachedCursorPosition = editor.getCursorPosition();
 
   finder.prompt({
     title: "Go to symbol: ",
