@@ -2211,4 +2211,3 @@ fn test_add_cursors_to_line_ends_keeps_existing_multi_cursors() {
     harness.render().unwrap();
     harness.assert_buffer_content("alpha!\nbeta!\ngamma!");
 }
-
