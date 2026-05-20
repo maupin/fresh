@@ -611,14 +611,6 @@ function maxListRowsForScreen(): number {
   return Math.max(MIN_LIST_ROWS, panelH - 12);
 }
 
-// Actual list height: fit the session count, clamped between
-// MIN_LIST_ROWS and the screen budget, so a handful of sessions
-// gives a compact panel (the host shrinks the floating panel to
-// content height) instead of a tall box padded with blank rows.
-function fitListRows(itemCount: number): number {
-  return Math.min(maxListRowsForScreen(), Math.max(MIN_LIST_ROWS, itemCount));
-}
-
 // Compose the right-hand preview pane. Normally it shows info
 // + action buttons (Stop, Archive, Delete); when a destructive
 // action is pending confirmation it swaps to a "Confirm
@@ -883,10 +875,10 @@ function buildPreviewPane(s: AgentSession | undefined): WidgetSpec {
 function buildOpenSpec(): WidgetSpec {
   if (!openDialog) return col();
   const filtered = openDialog.filteredIds;
-  // Fit the list (and therefore the whole floating panel) to the
-  // session count, bounded by the screen budget — few sessions give
-  // a compact panel instead of a tall box padded with blank rows.
-  openDialog.listVisibleRows = fitListRows(filtered.length);
+  // Fill the panel's full height budget (the list pads with blank
+  // rows when there are few sessions) so the dialog stays
+  // vertically full rather than collapsing to a short floating box.
+  openDialog.listVisibleRows = maxListRowsForScreen();
   const activeId = editor.activeWindow();
   const items = filtered.map((id) => renderListItem(id, activeId));
   const itemKeys = filtered.map(String);
