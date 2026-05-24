@@ -1,11 +1,18 @@
 {
   "active": 1,
-  "next_id": 2,
+  "next_id": 3,
   "windows": [
     {
       "id": 1,
-      "label": "v036-worktree-session",
-      "root": "__WORKTREE__"
+      "label": "project",
+      "root": "__PROJECT__",
+      "plugin_state": {}
+    },
+    {
+      "id": 2,
+      "label": "anna-katharine-green_hand-and-ring",
+      "root": "__WORKTREE__",
+      "plugin_state": {}
     }
   ]
 }
