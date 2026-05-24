@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "active": 5,
+  "next_id": 6,
+  "windows": [
+    {
+      "id": 5,
+      "label": "other-project-session",
+      "root": "__OTHER__",
+      "project_path": "__OTHER__",
+      "plugin_state": {
+        "orchestrator": {
+          "project_path": "__OTHER__",
+          "shared_worktree": false
+        }
+      }
+    }
+  ]
+}
