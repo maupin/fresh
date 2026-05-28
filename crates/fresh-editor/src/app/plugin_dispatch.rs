@@ -4318,8 +4318,21 @@ impl Editor {
             .map(|s| s.to_string())
             .unwrap_or_default();
         if old_key == new_key {
+            tracing::warn!(
+                target: "fresh::dock",
+                panel_id,
+                key = %new_key,
+                "set_panel_focus_and_notify: no-op (old == new)"
+            );
             return;
         }
+        tracing::warn!(
+            target: "fresh::dock",
+            panel_id,
+            old = %old_key,
+            new = %new_key,
+            "set_panel_focus_and_notify: firing `focus` widget_event"
+        );
         self.widget_registry
             .set_focus_key(panel_id, new_key.clone());
         if self
@@ -5893,6 +5906,13 @@ impl Editor {
             .get(panel_id)
             .map(|p| p.focus_key.clone())
             .unwrap_or_default();
+        tracing::warn!(
+            target: "fresh::dock",
+            panel_id,
+            ?slot,
+            widget_key = %widget_key,
+            "refocus_floating_panel: firing unconditional `focus` widget_event"
+        );
         if self
             .plugin_manager
             .read()
@@ -5924,6 +5944,12 @@ impl Editor {
         if let Some(f) = self.panel_mut(slot) {
             f.focused = false;
         }
+        tracing::warn!(
+            target: "fresh::dock",
+            panel_id,
+            ?slot,
+            "blur_floating_panel: firing `blur` widget_event"
+        );
         let widget_key = self
             .widget_registry
             .get(panel_id)
