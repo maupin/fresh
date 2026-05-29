@@ -174,6 +174,8 @@ export interface PromptOptions<T> {
   source: SearchSource<T> | FilterSource<T>;
   /** Initial query value */
   initialQuery?: string;
+  /** Initial selected index in suggestion list (default: 0) */
+  initialSelectedIndex?: number;
   /**
    * Render the prompt as a centred floating overlay with an
    * embedded preview pane (issue #1796). When true, the editor
@@ -455,6 +457,7 @@ export class Finder<T> {
     pendingKill: null,
     originalSplitId: null,
   };
+  private initialSelectedIndex: number | undefined;
 
   // Preview state (shared between prompt and panel modes)
   private previewState: PreviewState = {
@@ -552,6 +555,7 @@ export class Finder<T> {
     this.isPromptMode = true;
     this.isPanelMode = false;
     this.currentSource = options.source;
+    this.initialSelectedIndex = options.initialSelectedIndex;
 
     // Reset state
     this.promptState = {
@@ -774,6 +778,10 @@ export class Finder<T> {
     if (this.currentSource.mode === "filter") {
       // Filter mode: filter client-side
       const filtered = this.filterItems(input, this.currentSource);
+      // Skip duplicate from loadFilterItems (which already sent initial empty-query results)
+      if (input === "" && this.promptState.results.length > 0) {
+        return;
+      }
       this.updatePromptResults(filtered);
 
       if (filtered.length > 0) {
@@ -947,7 +955,10 @@ export class Finder<T> {
       })
     );
 
-    this.editor.setPromptSuggestions(suggestions);
+    this.editor.setPromptSuggestions(suggestions, this.initialSelectedIndex);
+    if (results.length > 0) {
+      this.initialSelectedIndex = undefined;
+    }
   }
 
   private async onPromptSelectionChanged(selectedIndex: number): Promise<void> {

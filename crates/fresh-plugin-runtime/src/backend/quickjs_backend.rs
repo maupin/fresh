@@ -4147,9 +4147,10 @@ impl JsEditorApi {
     pub fn set_prompt_suggestions(
         &self,
         suggestions: Vec<fresh_core::command::Suggestion>,
+        selected_index: Option<u32>,
     ) -> bool {
         self.command_sender
-            .send(PluginCommand::SetPromptSuggestions { suggestions, selected_index: None })
+            .send(PluginCommand::SetPromptSuggestions { suggestions, selected_index })
             .is_ok()
     }
 

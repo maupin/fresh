@@ -59,6 +59,9 @@ let cachedBufferId: number | null = null;
 let cachedFilePath: string = "";
 let cachedLanguage: string | undefined = undefined;
 let cachedCursorPosition = 0;
+let cachedCursorLine = 0;
+
+let preloadedSymbols: SymbolItem[] = [];
 
 async function navigateToSymbol(bufferId: number, sym: SymbolItem): Promise<void> {
   if (bufferId === null) return;
@@ -100,6 +103,31 @@ function format(sym: SymbolItem): DisplayEntry {
   }
 };
 
+function findMatchingSymbolIndex(symbols: SymbolItem[], cursorLine: number): number {
+  let bestIdx = -1;
+  let bestSpan = Number.MAX_SAFE_INTEGER;
+  let bestStartLine = Number.MAX_SAFE_INTEGER;
+  let bestStartChar = Number.MAX_SAFE_INTEGER;
+
+  for (let i = 0; i < symbols.length; i++) {
+    const sym = symbols[i];
+    if (sym.startLine <= cursorLine && cursorLine <= sym.endLine) {
+      const span = sym.endLine - sym.startLine;
+      if (
+        span < bestSpan ||
+        (span === bestSpan && sym.startLine < bestStartLine) ||
+        (span === bestSpan && sym.startLine === bestStartLine && sym.startCharacter < bestStartChar)
+      ) {
+        bestIdx = i;
+        bestSpan = span;
+        bestStartLine = sym.startLine;
+        bestStartChar = sym.startCharacter;
+      }
+    }
+  }
+  return bestIdx;
+}
+
 const finder = new Finder(editor, {
   id: "lsp_symbols",
   preview: false,
@@ -117,7 +145,7 @@ const finder = new Finder(editor, {
 
 const finderSource: FilterSource<SymbolItem> = {
   mode: "filter",
-  load: async () => loadSymbols(cachedFilePath, cachedLanguage ?? ""),
+  load: async () => preloadedSymbols,
   filter: (items, query) => {
     const filtered = defaultFuzzyFilter(
       items,
@@ -152,10 +180,17 @@ async function openSymbolsListHandler(): Promise<void> {
   }
 
   cachedCursorPosition = editor.getCursorPosition();
+  cachedCursorLine = editor.getCursorLine();
+
+  // Pre-load symbols to determine matching index for preselection
+  const symbols = await loadSymbols(cachedFilePath, cachedLanguage);
+  const matchIdx = findMatchingSymbolIndex(symbols, cachedCursorLine);
+  preloadedSymbols = symbols;
 
   finder.prompt({
     title: "Go to symbol: ",
     source: finderSource,
+    initialSelectedIndex: matchIdx >= 0 ? matchIdx : undefined,
   });
 }
 
@@ -193,13 +228,23 @@ function parseSymbols(result: unknown): SymbolItem[] {
           endLine = typeof end.line === "number" ? end.line : startLine;
         }
       } else if ("selectionRange" in raw) {
-        const selectionRange = raw.selectionRange as Record<string, unknown>;
-        const start = selectionRange.start as Record<string, unknown>;
-        const end = selectionRange.end as Record<string, unknown>;
-
-        startLine = typeof start.line === "number" ? start.line : 0;
-        startCharacter = typeof start.character === "number" ? start.character : 0;
-        endLine = typeof end.line === "number" ? end.line : startLine;
+        // Hierarchical DocumentSymbol has both range (full extent)
+        // and selectionRange (name extent). Prefer range for endLine.
+        if ("range" in raw && typeof raw.range === "object") {
+          const range = raw.range as Record<string, unknown>;
+          const start = range.start as Record<string, unknown>;
+          const end = range.end as Record<string, unknown>;
+          startLine = typeof start.line === "number" ? start.line : 0;
+          startCharacter = typeof start.character === "number" ? start.character : 0;
+          endLine = typeof end.line === "number" ? end.line : startLine;
+        } else {
+          const selectionRange = raw.selectionRange as Record<string, unknown>;
+          const start = selectionRange.start as Record<string, unknown>;
+          const end = selectionRange.end as Record<string, unknown>;
+          startLine = typeof start.line === "number" ? start.line : 0;
+          startCharacter = typeof start.character === "number" ? start.character : 0;
+          endLine = typeof end.line === "number" ? end.line : startLine;
+        }
       }
 
       symbols.push({

@@ -6015,7 +6015,7 @@ mod tests {
                 Suggestion::new("one".into()),
                 Suggestion::new("two".into()),
             ]),
-            PluginCommand::SetPromptSuggestions { suggestions }
+            PluginCommand::SetPromptSuggestions { suggestions, .. }
                 if suggestions.len() == 2
                     && suggestions[0].text == "one"
                     && suggestions[1].text == "two"
