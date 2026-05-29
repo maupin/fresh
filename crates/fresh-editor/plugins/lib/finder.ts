@@ -107,6 +107,9 @@ export interface FinderConfig<T> {
   /** Custom selection handler (default: open file at location) */
   onSelect?: (item: T, entry: DisplayEntry) => void;
 
+  /** Custom selection changed handler  */
+  onSelectionChanged?: (item: T, entry: DisplayEntry) => void;
+
   /** Panel-specific: group results by file */
   groupBy?: "file" | "severity" | "none";
 
@@ -948,7 +951,12 @@ export class Finder<T> {
   }
 
   private async onPromptSelectionChanged(selectedIndex: number): Promise<void> {
+    const item = this.promptState.results[selectedIndex];
     const entry = this.promptState.entries[selectedIndex];
+
+    if (this.config.onSelectionChanged) {
+      this.config.onSelectionChanged(item, entry);
+    }
 
     if (entry && this.shouldShowPreview()) {
       await this.updatePreview(entry);
@@ -1013,6 +1021,11 @@ export class Finder<T> {
     this.promptState.entries = [];
     this.promptState.originalSplitId = null;
     this.editor.setStatus("Cancelled");
+
+    // Notify caller that the prompt was closed
+    if (this.config.onClose) {
+      this.config.onClose();
+    }
   }
 
   private closePrompt(): void {
@@ -1053,19 +1066,8 @@ export class Finder<T> {
       const lines = content.split("\n");
 
       const contextLines = this.getContextLines();
-
-      const loc = entry.location;
-      const rangeEnd = loc.endLine ?? loc.line;
-
-      // Build set of lines in the highlight range (1-indexed)
-      const rangeLines = new Set<number>();
-      const rangeStart = Math.min(loc.line, rangeEnd);
-      for (let r = rangeStart; r <= rangeEnd; r++) {
-        rangeLines.add(r);
-      }
-
-      let startLine = Math.max(0, rangeStart - 1 - contextLines);
-      let endLine = Math.min(lines.length, rangeEnd + contextLines);
+      const startLine = Math.max(0, entry.location.line - 1 - contextLines);
+      const endLine = Math.min(lines.length, entry.location.line + contextLines);
 
       const entries: TextPropertyEntry[] = [];
 
@@ -1083,7 +1085,7 @@ export class Finder<T> {
       for (let i = startLine; i < endLine; i++) {
         const lineNum = i + 1;
         const lineContent = lines[i] || "";
-        const isMatchLine = rangeLines.has(lineNum);
+        const isMatchLine = lineNum === entry.location.line;
         const prefix = isMatchLine ? "> " : "  ";
         const lineNumStr = String(lineNum).padStart(4, " ");
 

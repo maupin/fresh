@@ -32,8 +32,6 @@ export interface Location {
   file: string;
   line: number;
   column: number;
-  /** End line for range highlighting in preview (1-indexed, inclusive) */
-  endLine?: number;
 }
 
 /**
