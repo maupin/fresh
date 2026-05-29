@@ -4149,7 +4149,7 @@ impl JsEditorApi {
         suggestions: Vec<fresh_core::command::Suggestion>,
     ) -> bool {
         self.command_sender
-            .send(PluginCommand::SetPromptSuggestions { suggestions })
+            .send(PluginCommand::SetPromptSuggestions { suggestions, selected_index: None })
             .is_ok()
     }
 
@@ -9830,7 +9830,7 @@ mod tests {
 
         let cmd = rx.try_recv().unwrap();
         match cmd {
-            PluginCommand::SetPromptSuggestions { suggestions } => {
+            PluginCommand::SetPromptSuggestions { suggestions, .. } => {
                 assert_eq!(suggestions.len(), 2);
                 assert_eq!(suggestions[0].text, "Option 1");
                 assert_eq!(suggestions[0].value, Some("opt1".to_string()));

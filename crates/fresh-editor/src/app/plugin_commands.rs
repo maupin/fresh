@@ -2063,6 +2063,7 @@ impl Editor {
     pub(super) fn handle_set_prompt_suggestions(
         &mut self,
         suggestions: Vec<fresh_core::command::Suggestion>,
+        selected_index: Option<u32>,
     ) {
         use crate::input::commands::{CommandSource, Suggestion as EditorSuggestion};
 
@@ -2090,11 +2091,14 @@ impl Editor {
             // don't handle their own filtering like theme editor dropdowns)
             prompt.original_suggestions = Some(internal_suggestions.clone());
             prompt.suggestions = internal_suggestions;
-            // Select first suggestion by default
+            // Select first suggestion by default (or the specified index)
             prompt.selected_suggestion = if prompt.suggestions.is_empty() {
                 None
             } else {
-                Some(0)
+                let idx = selected_index
+                    .map(|i| (i as usize).min(prompt.suggestions.len() - 1))
+                    .unwrap_or(0);
+                Some(idx)
             };
             // A fresh result list re-engages keep-selection-visible scrolling
             // (issue #2119): a stale manual-scroll latch from the previous

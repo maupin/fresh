@@ -2736,7 +2736,10 @@ pub enum PluginCommand {
 
     /// Update the suggestions list for the current prompt
     /// Uses the editor's Suggestion type
-    SetPromptSuggestions { suggestions: Vec<Suggestion> },
+    SetPromptSuggestions {
+        suggestions: Vec<Suggestion>,
+        selected_index: Option<u32>,
+    },
 
     /// When enabled, navigating suggestions updates the prompt input text
     SetPromptInputSync { sync: bool },
@@ -4875,7 +4878,7 @@ impl PluginApi {
     /// Set the suggestions for the current prompt
     /// This updates the prompt's autocomplete/selection list
     pub fn set_prompt_suggestions(&self, suggestions: Vec<Suggestion>) -> Result<(), String> {
-        self.send_command(PluginCommand::SetPromptSuggestions { suggestions })
+        self.send_command(PluginCommand::SetPromptSuggestions { suggestions, selected_index: None })
     }
 
     /// Enable/disable syncing prompt input text when navigating suggestions
