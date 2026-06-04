@@ -2,6 +2,8 @@
 
 ## 0.3.11
 
+For live updates on Fresh, [follow me on X](https://x.com/TheNoamLewis).
+
 ### Features
 
 * **Orchestrator Dock**: a persistent, non-modal left-column session switcher. Alt+O toggles focus; arrows live-switch the active session. Each row shows status (working/idle), project, branch, git summary, and a PR badge. Project dropdown, card/compact view toggle, and a Manage button for the Orchestrator dialog.
