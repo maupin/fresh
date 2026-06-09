@@ -31,11 +31,7 @@
     "popup.trust_elevate_title": "Workspace not trusted",
     "popup.trust_elevate_message": "Activating %{name} runs code from this folder. Trust this folder?",
     "popup.trust_elevate_action_keep": "Keep restricted",
-    "popup.trust_elevate_action_cancel": "Cancel",
-    "statusbar.trust_label": "Trust",
-    "statusbar.trust_restricted": "restricted",
-    "statusbar.trust_blocked": "blocked",
-    "statusbar.trust_trusted": "trusted"
+    "popup.trust_elevate_action_cancel": "Cancel"
   },
   "cs": {
     "cmd.activate": "Prostředí: Aktivovat zjištěné prostředí (venv / direnv / mise)",
@@ -69,11 +65,7 @@
     "popup.trust_elevate_title": "Pracovní prostor není důvěryhodný",
     "popup.trust_elevate_message": "Aktivace %{name} spustí kód z této složky. Důvěřovat této složce?",
     "popup.trust_elevate_action_keep": "Ponechat omezené",
-    "popup.trust_elevate_action_cancel": "Zrušit",
-    "statusbar.trust_label": "Důvěra",
-    "statusbar.trust_restricted": "omezeno",
-    "statusbar.trust_blocked": "blokováno",
-    "statusbar.trust_trusted": "důvěryhodné"
+    "popup.trust_elevate_action_cancel": "Zrušit"
   },
   "de": {
     "cmd.activate": "Umgebung: Erkannte Umgebung aktivieren (venv / direnv / mise)",
@@ -107,11 +99,7 @@
     "popup.trust_elevate_title": "Arbeitsbereich nicht vertrauenswürdig",
     "popup.trust_elevate_message": "%{name} zu aktivieren führt Code aus diesem Ordner aus. Diesem Ordner vertrauen?",
     "popup.trust_elevate_action_keep": "Eingeschränkt lassen",
-    "popup.trust_elevate_action_cancel": "Abbrechen",
-    "statusbar.trust_label": "Vertrauen",
-    "statusbar.trust_restricted": "eingeschränkt",
-    "statusbar.trust_blocked": "blockiert",
-    "statusbar.trust_trusted": "vertraut"
+    "popup.trust_elevate_action_cancel": "Abbrechen"
   },
   "es": {
     "cmd.activate": "Entorno: Activar entorno detectado (venv / direnv / mise)",
@@ -145,11 +133,7 @@
     "popup.trust_elevate_title": "Espacio de trabajo no confiable",
     "popup.trust_elevate_message": "Activar %{name} ejecuta código desde esta carpeta. ¿Confiar en esta carpeta?",
     "popup.trust_elevate_action_keep": "Mantener restringido",
-    "popup.trust_elevate_action_cancel": "Cancelar",
-    "statusbar.trust_label": "Confianza",
-    "statusbar.trust_restricted": "restringido",
-    "statusbar.trust_blocked": "bloqueado",
-    "statusbar.trust_trusted": "de confianza"
+    "popup.trust_elevate_action_cancel": "Cancelar"
   },
   "fr": {
     "cmd.activate": "Env : Activer l'environnement détecté (venv / direnv / mise)",
@@ -183,11 +167,7 @@
     "popup.trust_elevate_title": "Espace de travail non approuvé",
     "popup.trust_elevate_message": "Activer %{name} exécute du code depuis ce dossier. Approuver ce dossier ?",
     "popup.trust_elevate_action_keep": "Garder restreint",
-    "popup.trust_elevate_action_cancel": "Annuler",
-    "statusbar.trust_label": "Confiance",
-    "statusbar.trust_restricted": "restreint",
-    "statusbar.trust_blocked": "bloqué",
-    "statusbar.trust_trusted": "approuvé"
+    "popup.trust_elevate_action_cancel": "Annuler"
   },
   "it": {
     "cmd.activate": "Ambiente: Attiva ambiente rilevato (venv / direnv / mise)",
@@ -221,11 +201,7 @@
     "popup.trust_elevate_title": "Spazio di lavoro non fidato",
     "popup.trust_elevate_message": "Attivare %{name} esegue codice da questa cartella. Fidarsi di questa cartella?",
     "popup.trust_elevate_action_keep": "Mantieni limitato",
-    "popup.trust_elevate_action_cancel": "Annulla",
-    "statusbar.trust_label": "Fiducia",
-    "statusbar.trust_restricted": "limitato",
-    "statusbar.trust_blocked": "bloccato",
-    "statusbar.trust_trusted": "attendibile"
+    "popup.trust_elevate_action_cancel": "Annulla"
   },
   "ja": {
     "cmd.activate": "環境: 検出した環境を有効化 (venv / direnv / mise)",
@@ -259,11 +235,7 @@
     "popup.trust_elevate_title": "ワークスペースが信頼されていません",
     "popup.trust_elevate_message": "%{name} を有効化するとこのフォルダのコードが実行されます。このフォルダを信頼しますか？",
     "popup.trust_elevate_action_keep": "制限したままにする",
-    "popup.trust_elevate_action_cancel": "キャンセル",
-    "statusbar.trust_label": "信頼",
-    "statusbar.trust_restricted": "制限",
-    "statusbar.trust_blocked": "ブロック",
-    "statusbar.trust_trusted": "信頼済み"
+    "popup.trust_elevate_action_cancel": "キャンセル"
   },
   "ko": {
     "cmd.activate": "환경: 감지된 환경 활성화 (venv / direnv / mise)",
@@ -297,11 +269,7 @@
     "popup.trust_elevate_title": "워크스페이스가 신뢰되지 않음",
     "popup.trust_elevate_message": "%{name}을(를) 활성화하면 이 폴더의 코드가 실행됩니다. 이 폴더를 신뢰하시겠습니까?",
     "popup.trust_elevate_action_keep": "제한 유지",
-    "popup.trust_elevate_action_cancel": "취소",
-    "statusbar.trust_label": "신뢰",
-    "statusbar.trust_restricted": "제한됨",
-    "statusbar.trust_blocked": "차단됨",
-    "statusbar.trust_trusted": "신뢰됨"
+    "popup.trust_elevate_action_cancel": "취소"
   },
   "pt-BR": {
     "cmd.activate": "Ambiente: Ativar ambiente detectado (venv / direnv / mise)",
@@ -335,11 +303,7 @@
     "popup.trust_elevate_title": "Espaço de trabalho não confiável",
     "popup.trust_elevate_message": "Ativar %{name} executa código desta pasta. Confiar nesta pasta?",
     "popup.trust_elevate_action_keep": "Manter restrito",
-    "popup.trust_elevate_action_cancel": "Cancelar",
-    "statusbar.trust_label": "Confiança",
-    "statusbar.trust_restricted": "restrito",
-    "statusbar.trust_blocked": "bloqueado",
-    "statusbar.trust_trusted": "confiável"
+    "popup.trust_elevate_action_cancel": "Cancelar"
   },
   "ru": {
     "cmd.activate": "Окружение: Активировать обнаруженное окружение (venv / direnv / mise)",
@@ -373,11 +337,7 @@
     "popup.trust_elevate_title": "Рабочая область не доверенная",
     "popup.trust_elevate_message": "Активация %{name} запускает код из этой папки. Доверять этой папке?",
     "popup.trust_elevate_action_keep": "Оставить ограниченной",
-    "popup.trust_elevate_action_cancel": "Отмена",
-    "statusbar.trust_label": "Доверие",
-    "statusbar.trust_restricted": "ограничено",
-    "statusbar.trust_blocked": "заблокировано",
-    "statusbar.trust_trusted": "доверено"
+    "popup.trust_elevate_action_cancel": "Отмена"
   },
   "th": {
     "cmd.activate": "สภาพแวดล้อม: เปิดใช้สภาพแวดล้อมที่ตรวจพบ (venv / direnv / mise)",
@@ -411,11 +371,7 @@
     "popup.trust_elevate_title": "พื้นที่ทำงานไม่ได้รับความเชื่อถือ",
     "popup.trust_elevate_message": "การเปิดใช้ %{name} จะรันโค้ดจากโฟลเดอร์นี้ เชื่อถือโฟลเดอร์นี้?",
     "popup.trust_elevate_action_keep": "คงสถานะจำกัด",
-    "popup.trust_elevate_action_cancel": "ยกเลิก",
-    "statusbar.trust_label": "ความเชื่อถือ",
-    "statusbar.trust_restricted": "จำกัด",
-    "statusbar.trust_blocked": "ปิดกั้น",
-    "statusbar.trust_trusted": "เชื่อถือ"
+    "popup.trust_elevate_action_cancel": "ยกเลิก"
   },
   "uk": {
     "cmd.activate": "Середовище: Активувати виявлене середовище (venv / direnv / mise)",
@@ -449,11 +405,7 @@
     "popup.trust_elevate_title": "Робочу область не довірено",
     "popup.trust_elevate_message": "Активація %{name} запускає код з цієї теки. Довіряти цій теці?",
     "popup.trust_elevate_action_keep": "Залишити обмеженою",
-    "popup.trust_elevate_action_cancel": "Скасувати",
-    "statusbar.trust_label": "Довіра",
-    "statusbar.trust_restricted": "обмежено",
-    "statusbar.trust_blocked": "заблоковано",
-    "statusbar.trust_trusted": "довірено"
+    "popup.trust_elevate_action_cancel": "Скасувати"
   },
   "vi": {
     "cmd.activate": "Môi trường: Kích hoạt môi trường đã phát hiện (venv / direnv / mise)",
@@ -487,11 +439,7 @@
     "popup.trust_elevate_title": "Không gian làm việc không tin cậy",
     "popup.trust_elevate_message": "Kích hoạt %{name} chạy mã từ thư mục này. Tin cậy thư mục này?",
     "popup.trust_elevate_action_keep": "Giữ giới hạn",
-    "popup.trust_elevate_action_cancel": "Huỷ",
-    "statusbar.trust_label": "Tin cậy",
-    "statusbar.trust_restricted": "giới hạn",
-    "statusbar.trust_blocked": "chặn",
-    "statusbar.trust_trusted": "tin cậy"
+    "popup.trust_elevate_action_cancel": "Huỷ"
   },
   "zh-CN": {
     "cmd.activate": "环境：激活检测到的环境（venv / direnv / mise）",
@@ -525,10 +473,6 @@
     "popup.trust_elevate_title": "工作区未受信任",
     "popup.trust_elevate_message": "激活 %{name} 将运行此文件夹中的代码。信任此文件夹？",
     "popup.trust_elevate_action_keep": "保持受限",
-    "popup.trust_elevate_action_cancel": "取消",
-    "statusbar.trust_label": "信任",
-    "statusbar.trust_restricted": "受限",
-    "statusbar.trust_blocked": "已阻止",
-    "statusbar.trust_trusted": "已信任"
+    "popup.trust_elevate_action_cancel": "取消"
   }
 }

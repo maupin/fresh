@@ -482,18 +482,12 @@ editor.on("plugins_loaded", "env_maybe_auto_activate");
 
 // === Status pill (opt-in to a user's status-bar layout) ===
 //
-// Two pills:
-// - "env" — what environment is active (always relevant once env-manager runs)
-// - "trust" — the workspace trust state. Adding the chip is opt-in (it's not in
-//   the default layout), so once a user puts it on their status bar it always
-//   reflects the current level — "restricted"/"blocked" when gated,
-//   "trusted" when not — rather than vanishing when trusted. This keeps the
-//   "restricted mode is always visible" guarantee (silent gating is the
-//   failure mode that gives VS Code its UX reputation) while still showing the
-//   chip the user explicitly asked to see. Clicking it routes to the trust
-//   decision; "Workspace Trust: Trust This Folder" elevates.
-
-const TRUST_TOKEN = "trust";
+// One pill: "env" — what environment is active (always relevant once
+// env-manager runs). Workspace trust has its own first-class, always-visible
+// core status-bar element (`{trust}`, rendered from the active session's trust
+// level every frame and capitalized); env-manager no longer registers a
+// competing per-buffer trust chip — that one rendered lowercase and vanished
+// for sessions whose buffer hadn't been refreshed.
 
 function refreshStatus(): void {
   const bufferId = editor.getActiveBufferId();
@@ -512,22 +506,9 @@ function refreshStatus(): void {
     value = editor.t("statusbar.system");
   }
   editor.setStatusBarValue(bufferId, STATUS_TOKEN, value);
-
-  // Trust chip — always reflects the current level for a user who opted the
-  // chip into their layout (restricted / blocked when gated, trusted
-  // otherwise), so it never silently renders blank.
-  const level = editor.workspaceTrustLevel();
-  const trustValue =
-    level === "restricted"
-      ? editor.t("statusbar.trust_restricted")
-      : level === "blocked"
-        ? editor.t("statusbar.trust_blocked")
-        : editor.t("statusbar.trust_trusted");
-  editor.setStatusBarValue(bufferId, TRUST_TOKEN, trustValue);
 }
 
 editor.registerStatusBarElement(STATUS_TOKEN, editor.t("statusbar.label"));
-editor.registerStatusBarElement(TRUST_TOKEN, editor.t("statusbar.trust_label"));
 
 registerHandler("env_refresh_status", refreshStatus);
 // `ready` populates the pills at boot (after workspace restore opened the
@@ -537,16 +518,14 @@ for (const event of ["ready", "buffer_activated", "after_file_open", "focus_gain
   editor.on(event, "env_refresh_status");
 }
 
-// === Clickable chips ===
+// === Clickable chip ===
 //
-// The status-bar pills env-manager registers (`env` and `trust`) become
-// first-class affordances back to their decisions. Clicking the env pill
-// re-runs `maybeAutoActivate`, which re-opens the activate prompt if a
-// pending decision remains. Clicking the trust chip routes through the
-// same flow but skips the silent path (the user clicked specifically
-// because they want to act on trust). These are the "Status beats
-// prompts" callbacks — the indicator is the affordance, not just a
-// passive label.
+// The `env` pill env-manager registers becomes a first-class affordance back
+// to its decision. Clicking it re-runs the activate flow, re-opening the
+// activate prompt if a pending decision remains — the "Status beats prompts"
+// callback, where the indicator is the affordance, not just a passive label.
+// (The workspace-trust `{trust}` element is core and owns its own click →
+// trust prompt; env-manager no longer handles trust clicks.)
 editor.on("status_bar_token_clicked", (data) => {
   if (data.plugin_name !== "env-manager") return;
   if (data.token_name === STATUS_TOKEN) {
@@ -568,16 +547,6 @@ editor.on("status_bar_token_clicked", (data) => {
       applyActivation(det);
     } else {
       showActivatePrompt(det);
-    }
-  } else if (data.token_name === TRUST_TOKEN) {
-    // If we have an env to activate, drive into the trust-elevation
-    // popup for it; otherwise fall back to invoking the workspace
-    // trust prompt directly so the user can still elevate.
-    const det = detect();
-    if (det && !isTrusted()) {
-      showTrustElevatePrompt(det);
-    } else {
-      editor.executeActions([{ action: "workspace_trust_prompt", count: 1 }]);
     }
   }
 });
