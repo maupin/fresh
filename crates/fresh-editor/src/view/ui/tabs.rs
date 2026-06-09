@@ -904,9 +904,7 @@ impl TabsRenderer {
         }
 
         // Pinned "+" cells (drawn on top at the right edge when tabs overflow).
-        if let (Some(plus_rect), Some(r)) =
-            (layout.new_tab_area.filter(|_| pin_plus), rec.as_deref_mut())
-        {
+        if let (Some(plus_rect), Some(r)) = (layout.new_tab_area.filter(|_| pin_plus), rec) {
             r.run(
                 plus_rect.x,
                 area.y,

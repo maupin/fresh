@@ -151,45 +151,6 @@ impl Editor {
         })
     }
 
-    /// Record theme key info for non-editor UI regions (status bar, tabs, menu, file explorer, scrollbar).
-    /// Called after all rendering is complete, using cached layout areas.
-    pub(super) fn record_non_editor_theme_regions(&mut self) {
-        use super::types::CellThemeInfo;
-
-        let sw = self.active_chrome().last_frame_width as usize;
-
-        // Status bar is recorded during paint (see status_bar.rs).
-
-        // Menu bar
-        if let Some(bar_area) = self
-            .active_chrome()
-            .menu_layout
-            .as_ref()
-            .map(|m| m.bar_area)
-        {
-            let info = CellThemeInfo {
-                fg_key: Some("ui.menu_fg".into()),
-                bg_key: Some("ui.menu_bg".into()),
-                region: "Menu Bar".into(),
-                syntax_category: None,
-            };
-            for row in bar_area.y..bar_area.y + bar_area.height {
-                for col in bar_area.x..bar_area.x + bar_area.width {
-                    let idx = row as usize * sw + col as usize;
-                    if let Some(cell) = self.active_chrome_mut().cell_theme_map.get_mut(idx) {
-                        *cell = info.clone();
-                    }
-                }
-            }
-        }
-
-        // File explorer is recorded during paint (see file_explorer.rs).
-
-        // Scrollbars are recorded during paint (see orchestration/mod.rs).
-
-        // Tab bars are recorded during paint (see tabs.rs).
-    }
-
     /// Render the theme info popup.
     pub(super) fn render_theme_info_popup(&self, frame: &mut Frame) {
         let popup = match &self.active_window().theme_info_popup {

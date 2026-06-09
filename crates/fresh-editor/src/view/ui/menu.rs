@@ -1,5 +1,6 @@
 //! Menu bar rendering
 
+use crate::app::types::CellThemeRecorder;
 use crate::config::{generate_dynamic_items, Menu, MenuConfig, MenuExt, MenuItem, MenuItemExt};
 use crate::primitives::display_width::str_width;
 use crate::view::theme::Theme;
@@ -501,8 +502,21 @@ impl MenuRenderer {
         theme: &Theme,
         hover_target: Option<&crate::app::HoverTarget>,
         mnemonics_enabled: bool,
+        mut rec: Option<&mut CellThemeRecorder>,
     ) -> MenuLayout {
         let mut layout = MenuLayout::new(area);
+        // Seed the menu bar with its base keys; each label overwrites its own
+        // cells (active menu → menu_active) below.
+        if let Some(r) = rec.as_deref_mut() {
+            r.run(
+                area.x,
+                area.y,
+                area.width,
+                Some("ui.menu_fg"),
+                Some("ui.menu_bg"),
+                "Menu Bar",
+            );
+        }
         // Combine config menus with plugin menus, expanding any DynamicSubmenus
         let all_menus: Vec<Menu> = menu_config
             .menus
@@ -559,6 +573,24 @@ impl MenuRenderer {
                 .menu_areas
                 .push((idx, Rect::new(current_x, area.y, label_width, 1)));
 
+            // Record this label's keys (active menu wears menu_active; hover is
+            // transient and not recorded).
+            if let Some(r) = rec.as_deref_mut() {
+                let (fg, bg) = if is_active {
+                    ("ui.menu_active_fg", "ui.menu_active_bg")
+                } else {
+                    ("ui.menu_fg", "ui.menu_bg")
+                };
+                r.run(
+                    current_x,
+                    area.y,
+                    label_width,
+                    Some(fg),
+                    Some(bg),
+                    "Menu Bar",
+                );
+            }
+
             // Check for mnemonic character (Alt+letter keybinding)
             let mnemonic = if mnemonics_enabled {
                 keybindings.find_menu_mnemonic(&menu.label)
@@ -614,6 +646,7 @@ impl MenuRenderer {
                     theme,
                     hover_target,
                     &mut layout,
+                    rec,
                 );
             }
         }
@@ -634,6 +667,7 @@ impl MenuRenderer {
         theme: &Theme,
         hover_target: Option<&crate::app::HoverTarget>,
         layout: &mut MenuLayout,
+        mut rec: Option<&mut CellThemeRecorder>,
     ) {
         // Calculate the x position of the top-level dropdown based on menu index
         // Skip hidden menus (those with `when` conditions that evaluate to false)
@@ -687,6 +721,7 @@ impl MenuRenderer {
                 hover_target,
                 &menu_state.context,
                 layout,
+                rec.as_deref_mut(),
             );
 
             // If not at the deepest level, navigate into the submenu for next iteration
@@ -763,6 +798,7 @@ impl MenuRenderer {
         hover_target: Option<&crate::app::HoverTarget>,
         context: &MenuContext,
         layout: &mut MenuLayout,
+        mut rec: Option<&mut CellThemeRecorder>,
     ) -> Rect {
         let max_width = Self::calculate_dropdown_width(items);
         let dropdown_height = items.len() + 2; // +2 for borders
@@ -800,6 +836,21 @@ impl MenuRenderer {
             height,
         };
 
+        // Seed the dropdown box (border + fill) with its surface keys; each
+        // item row overwrites its own cells below.
+        if let Some(r) = rec.as_deref_mut() {
+            for row in dropdown_area.y..dropdown_area.y + dropdown_area.height {
+                r.run(
+                    dropdown_area.x,
+                    row,
+                    dropdown_area.width,
+                    Some("ui.menu_border_fg"),
+                    Some("ui.menu_dropdown_bg"),
+                    "Menu Dropdown",
+                );
+            }
+        }
+
         // Build dropdown content
         let mut lines = Vec::new();
         let max_items = (height.saturating_sub(2)) as usize;
@@ -832,6 +883,27 @@ impl MenuRenderer {
                 layout.item_areas.push((idx, item_area));
             } else {
                 layout.submenu_areas.push((depth, idx, item_area));
+            }
+
+            // Record this item's keys, mirroring the per-kind style below.
+            if let Some(r) = rec.as_deref_mut() {
+                let (fg, bg) = match item {
+                    MenuItem::Separator { .. } => ("ui.menu_separator_fg", "ui.menu_dropdown_bg"),
+                    MenuItem::Label { .. } => ("ui.menu_disabled_fg", "ui.menu_dropdown_bg"),
+                    _ if !enabled => ("ui.menu_disabled_fg", "ui.menu_disabled_bg"),
+                    _ if is_highlighted || has_open_submenu => {
+                        ("ui.menu_highlight_fg", "ui.menu_highlight_bg")
+                    }
+                    _ => ("ui.menu_dropdown_fg", "ui.menu_dropdown_bg"),
+                };
+                r.run(
+                    item_area.x,
+                    item_area.y,
+                    item_area.width,
+                    Some(fg),
+                    Some(bg),
+                    "Menu Dropdown",
+                );
             }
 
             let line = match item {

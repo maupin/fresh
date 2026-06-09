@@ -1505,6 +1505,7 @@ impl Editor {
             let menu_bar_mnemonics = self.config.editor.menu_bar_mnemonics;
             let expanded = self.expanded_menus_cache.get().expect("just updated");
             let keybindings = self.keybindings.read().unwrap();
+            let mut menu_runs: Vec<crate::app::types::ThemeRun> = Vec::new();
             let new_menu_layout = crate::view::ui::MenuRenderer::render(
                 frame,
                 menu_bar_area,
@@ -1514,9 +1515,13 @@ impl Editor {
                 &*self.theme.read().unwrap(),
                 hover_target.as_ref(),
                 menu_bar_mnemonics,
+                Some(&mut crate::app::types::CellThemeRecorder::new(
+                    &mut menu_runs,
+                )),
             );
             drop(keybindings);
             self.active_chrome_mut().menu_layout = Some(new_menu_layout);
+            self.active_chrome_mut().apply_theme_runs(&menu_runs);
         } else {
             self.active_chrome_mut().menu_layout = None;
         }
@@ -1538,8 +1543,8 @@ impl Editor {
             self.render_new_tab_menu(frame, &menu);
         }
 
-        // Record non-editor region theme keys for the theme inspector
-        self.record_non_editor_theme_regions();
+        // Chrome theme-key provenance (status bar, menu, tabs, file explorer,
+        // scrollbars) is now recorded during each region's own paint.
 
         // Render tab drag drop zone overlay if dragging a tab
         let drag_state_clone = self.active_window().mouse_state.dragging_tab.clone();

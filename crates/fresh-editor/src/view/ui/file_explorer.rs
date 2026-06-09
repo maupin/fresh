@@ -213,7 +213,7 @@ impl FileExplorerRenderer {
 
         // Refine the selected row with its highlight keys (focused → selection
         // background, blurred → current-line background).
-        if let Some(r) = rec.as_deref_mut() {
+        if let Some(r) = rec {
             if let Some(selected) = selected_index {
                 if selected >= scroll_offset && selected < scroll_offset + viewport_height {
                     let row = area.y + 1 + (selected - scroll_offset) as u16;
