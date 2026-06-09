@@ -1468,53 +1468,12 @@ impl Editor {
             );
         }
 
-        // Render the workspace-trust prompt as a blocking modal in the same
-        // z-band as the settings / wizard modals: dim the whole frame, then
-        // draw the dialog on top. Placed here (above the generic global-popup
-        // slot and buffer chrome) so it has strict z-order parity with the
-        // other modals and can never be obscured by the dashboard/explorer.
-        let trust_layout = if top_is_trust_modal {
-            crate::view::dimming::apply_dimming(frame, size);
-            let selected = self
-                .global_popups
-                .top()
-                .and_then(|p| match &p.content {
-                    crate::view::popup::PopupContent::List { selected, .. } => Some(*selected),
-                    _ => None,
-                })
-                .unwrap_or(1);
-            let path = self.working_dir().display().to_string();
-            let triggers = self.workspace_trust_markers.join(", ");
-            let secondary_label = if self.workspace_trust_prompt_cancellable {
-                rust_i18n::t!("trust.dialog.btn_cancel").into_owned()
-            } else {
-                let quit_hint = self.keybindings.read().ok().and_then(|kb| {
-                    kb.get_keybinding_for_action(
-                        &crate::input::keybindings::Action::Quit,
-                        crate::input::keybindings::KeyContext::Normal,
-                    )
-                });
-                match quit_hint {
-                    Some(k) => rust_i18n::t!("trust.dialog.btn_quit_key", key = k).into_owned(),
-                    None => rust_i18n::t!("trust.dialog.btn_quit").into_owned(),
-                }
-            };
-            Some(
-                crate::view::workspace_trust_dialog::render_workspace_trust_dialog(
-                    frame,
-                    size,
-                    selected,
-                    &path,
-                    &triggers,
-                    &secondary_label,
-                    self.workspace_trust_scroll,
-                    &theme_clone,
-                ),
-            )
-        } else {
-            None
-        };
-        self.active_chrome_mut().workspace_trust_dialog = trust_layout;
+        // The workspace-trust prompt is a blocking, top-most security modal.
+        // It dims the *entire* frame (the dock included) and centres in the
+        // full window, so it is rendered at the very end of this method —
+        // after the dock and floating panels — rather than here, where the
+        // dock's later pass would overpaint its left edge. See the bottom of
+        // `render`.
 
         if self.active_window_mut().menu_bar_visible {
             // Pre-expand DynamicSubmenu items once per registry; without this
@@ -1708,6 +1667,53 @@ impl Editor {
             };
             self.render_floating_widget_panel(frame, modal_area, super::PanelSlot::Floating);
         }
+
+        // Workspace-trust prompt — a blocking, top-most security modal. Drawn
+        // dead last (after the dock and any floating panel) so it dims the
+        // *entire* frame, centres in the full window (dock area included), and
+        // renders on top of the dock rather than being overpainted by it.
+        let trust_layout = if top_is_trust_modal {
+            crate::view::dimming::apply_dimming(frame, size);
+            let selected = self
+                .global_popups
+                .top()
+                .and_then(|p| match &p.content {
+                    crate::view::popup::PopupContent::List { selected, .. } => Some(*selected),
+                    _ => None,
+                })
+                .unwrap_or(1);
+            let path = self.working_dir().display().to_string();
+            let triggers = self.workspace_trust_markers.join(", ");
+            let secondary_label = if self.workspace_trust_prompt_cancellable {
+                rust_i18n::t!("trust.dialog.btn_cancel").into_owned()
+            } else {
+                let quit_hint = self.keybindings.read().ok().and_then(|kb| {
+                    kb.get_keybinding_for_action(
+                        &crate::input::keybindings::Action::Quit,
+                        crate::input::keybindings::KeyContext::Normal,
+                    )
+                });
+                match quit_hint {
+                    Some(k) => rust_i18n::t!("trust.dialog.btn_quit_key", key = k).into_owned(),
+                    None => rust_i18n::t!("trust.dialog.btn_quit").into_owned(),
+                }
+            };
+            Some(
+                crate::view::workspace_trust_dialog::render_workspace_trust_dialog(
+                    frame,
+                    size,
+                    selected,
+                    &path,
+                    &triggers,
+                    &secondary_label,
+                    self.workspace_trust_scroll,
+                    &theme_clone,
+                ),
+            )
+        } else {
+            None
+        };
+        self.active_chrome_mut().workspace_trust_dialog = trust_layout;
     }
 
     /// Drain plugin commands enqueued before this frame's layout pass.
