@@ -3957,6 +3957,16 @@ fn real_main() -> AnyhowResult<()> {
                 let previous = current_keepalive.replace(new_keepalive);
                 drop(previous);
             }
+        } else if restart_dir.is_some() {
+            // Non-transition restart (e.g. change-working-dir, config reload):
+            // carry the *active session's own backend* forward by moving it out
+            // of the editor we're about to drop, rather than booting the next
+            // iteration on the local placeholder. Without this a `fresh
+            // user@host` (or other CLI-remote) session would silently drop to
+            // local on restart — `Authority` is non-`Clone`, so it must be
+            // moved, not copied. Its `current_keepalive` (the carrier) is a
+            // loop-local and already survives the rebuild.
+            current_authority = editor.take_active_authority();
         }
 
         // Pluck the warning-log channel back out of the soon-to-be-

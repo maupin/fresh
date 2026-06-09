@@ -715,6 +715,17 @@ impl EditorServer {
             }
         }
 
+        // Non-transition rebuild (working-dir change, config reload): carry the
+        // active session's own backend forward by moving it out of the old
+        // editor, so a remote session isn't dropped to the local placeholder
+        // `build_editor_instance` leaves behind. A real authority transition
+        // (`new_authority`) overwrites `current_authority` just below.
+        if new_authority.is_none() {
+            if let Some(ref mut editor) = self.editor {
+                self.current_authority = editor.take_active_authority();
+            }
+        }
+
         // Drop old editor + terminal.  Drop impls shut down PTYs, LSP
         // servers, and plugin threads.
         self.editor = None;

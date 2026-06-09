@@ -724,6 +724,19 @@ impl Editor {
         &self.active_window().authority
     }
 
+    /// Move the active window's `Authority` out, leaving a local placeholder.
+    /// Used by the restart loops to carry the active session's backend into
+    /// the rebuilt editor across a *non-transition* restart — `Authority` is
+    /// non-`Clone`, so it must be moved. The editor is being torn down
+    /// immediately after, so the placeholder left behind is never observed.
+    pub fn take_active_authority(&mut self) -> crate::services::authority::Authority {
+        let placeholder = crate::services::authority::Authority::local(
+            std::sync::Arc::new(crate::services::workspace_trust::WorkspaceTrust::permissive()),
+            std::sync::Arc::new(crate::services::env_provider::EnvProvider::inactive()),
+        );
+        std::mem::replace(&mut self.active_window_mut().authority, placeholder)
+    }
+
     /// The editor's current working directory — the active window's
     /// project root. Derived, not stored: there is no separate
     /// `working_dir` field that could drift out of sync with the active
