@@ -693,16 +693,11 @@ fn default_status_bar_left() -> Vec<StatusBarElement> {
     // where users learn to look for both from VS Code. Both are
     // mouse-clickable and key-bindable.
     //
-    // Note: the `Filename` element historically also prepended
-    // `[Container:<id>] ` / `<SSH_PREFIX>conn<TERMINATOR>` to its
-    // text. That's redundant with this indicator — see the
-    // matching change in `view::ui::status_bar::render_element`'s
-    // Filename branch, which now skips the prefix when the
-    // indicator is on the bar.
+    // The filename is intentionally omitted: the active file is already
+    // shown in the tab bar, so repeating it on the status bar is redundant.
     vec![
         StatusBarElement::WorkspaceTrust,
         StatusBarElement::RemoteIndicator,
-        StatusBarElement::Filename,
         StatusBarElement::Cursor,
         StatusBarElement::Diagnostics,
         StatusBarElement::CursorCount,
