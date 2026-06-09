@@ -279,6 +279,14 @@ impl Editor {
         let theme = &*self.theme.read().unwrap();
         let info = &popup.info;
 
+        // Key names render in the popup's own text colour (always legible on
+        // popup_bg) with bold to set them apart from the "Foreground:" label.
+        // `menu_highlight_fg` was wrong here: it's the fg for `menu_highlight_bg`
+        // and on some themes (e.g. dracula) equals popup_bg, so the key vanished.
+        let key_style = Style::default()
+            .fg(theme.popup_text_fg)
+            .add_modifier(ratatui::style::Modifier::BOLD);
+
         let mut lines = vec![];
         lines.push(Line::from(format!(" Region: {}", info.region)));
         lines.push(Line::from(""));
@@ -286,7 +294,7 @@ impl Editor {
         if let Some(ref fg_key) = info.fg_key {
             lines.push(Line::from(vec![
                 Span::styled(" Foreground: ", Style::default().fg(theme.popup_text_fg)),
-                Span::styled(fg_key.clone(), Style::default().fg(theme.menu_highlight_fg)),
+                Span::styled(fg_key.clone(), key_style),
             ]));
             if let Some(color) = info.fg_color {
                 let rgb_str = format_color_rgb(color);
@@ -305,7 +313,7 @@ impl Editor {
         if let Some(ref bg_key) = info.bg_key {
             lines.push(Line::from(vec![
                 Span::styled(" Background: ", Style::default().fg(theme.popup_text_fg)),
-                Span::styled(bg_key.clone(), Style::default().fg(theme.menu_highlight_fg)),
+                Span::styled(bg_key.clone(), key_style),
             ]));
             if let Some(color) = info.bg_color {
                 let rgb_str = format_color_rgb(color);
