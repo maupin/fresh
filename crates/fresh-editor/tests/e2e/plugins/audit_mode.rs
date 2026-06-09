@@ -4202,13 +4202,17 @@ fn test_review_branch_detail_pane_page_down_works() {
     repo.git_add_all();
     repo.git_commit("add big file");
 
-    let mut harness = EditorTestHarness::with_config_and_working_dir(
-        120,
-        30,
-        Config::default(),
-        repo.path.clone(),
-    )
-    .unwrap();
+    // This test detects the read-only detail buffer via its status-bar entry
+    // (`*detail* [RO]`), rendered by the `{filename}` element, which is not in
+    // the default status bar — add it for this test.
+    let mut config = Config::default();
+    config
+        .editor
+        .status_bar
+        .left
+        .insert(0, fresh::config::StatusBarElement::Filename);
+    let mut harness =
+        EditorTestHarness::with_config_and_working_dir(120, 30, config, repo.path.clone()).unwrap();
     harness.render().unwrap();
 
     harness
@@ -4311,13 +4315,17 @@ fn test_review_branch_detail_enter_opens_file_at_commit() {
     repo.git_add_all();
     repo.git_commit("add notes.txt");
 
-    let mut harness = EditorTestHarness::with_config_and_working_dir(
-        120,
-        40,
-        Config::default(),
-        repo.path.clone(),
-    )
-    .unwrap();
+    // This test detects the read-only file-view buffer via its status-bar
+    // entry (`<hash>:notes.txt* [RO]`), rendered by the `{filename}` element,
+    // which is not in the default status bar — add it for this test.
+    let mut config = Config::default();
+    config
+        .editor
+        .status_bar
+        .left
+        .insert(0, fresh::config::StatusBarElement::Filename);
+    let mut harness =
+        EditorTestHarness::with_config_and_working_dir(120, 40, config, repo.path.clone()).unwrap();
     harness.render().unwrap();
 
     harness

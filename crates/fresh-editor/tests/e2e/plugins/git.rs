@@ -2763,13 +2763,17 @@ fn test_git_log_file_view_jk_navigation() {
     let original_dir = repo.change_to_repo_dir();
     let _guard = DirGuard::new(original_dir);
 
-    let mut harness = EditorTestHarness::with_config_and_working_dir(
-        120,
-        40,
-        Config::default(),
-        repo.path.clone(),
-    )
-    .unwrap();
+    // This test detects the read-only file-view buffer via its status-bar
+    // entry (`<hash>:notes.txt* [RO]`), rendered by the `{filename}` element.
+    // `{filename}` is not in the default status bar, so add it for this test.
+    let mut config = Config::default();
+    config
+        .editor
+        .status_bar
+        .left
+        .insert(0, fresh::config::StatusBarElement::Filename);
+    let mut harness =
+        EditorTestHarness::with_config_and_working_dir(120, 40, config, repo.path.clone()).unwrap();
 
     trigger_git_log(&mut harness);
 

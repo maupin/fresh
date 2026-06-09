@@ -48,8 +48,8 @@
         "show_status_bar": true,
         "status_bar": {
           "left": [
+            "{trust}",
             "{remote}",
-            "{filename}",
             "{cursor}",
             "{diagnostics}",
             "{cursor_count}",
@@ -397,8 +397,8 @@
           "$ref": "#/$defs/StatusBarConfig",
           "default": {
             "left": [
+              "{trust}",
               "{remote}",
-              "{filename}",
               "{cursor}",
               "{diagnostics}",
               "{cursor_count}",
@@ -813,8 +813,8 @@
             "$ref": "#/$defs/StatusBarElement"
           },
           "default": [
+            "{trust}",
             "{remote}",
-            "{filename}",
             "{cursor}",
             "{diagnostics}",
             "{cursor_count}",
@@ -917,6 +917,10 @@
         {
           "value": "{remote}",
           "name": "Remote Indicator"
+        },
+        {
+          "value": "{trust}",
+          "name": "Workspace Trust"
         }
       ]
     },
