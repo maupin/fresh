@@ -932,43 +932,13 @@ export function key(name: string): WidgetAction {
 }
 
 // =============================================================================
-// Panel-id allocation. Plugin-side counter; need only be unique per
-// plugin instance (the host doesn't interpret the value).
+// Panel-id allocation.
 // =============================================================================
 
+// Panel ids are plugin-local: the host keys panels by (plugin, id) and
+// delivers widget_events only to the owning plugin, so a plain per-context
+// counter is all the uniqueness a panel id ever needs.
 let nextPanelId = 1;
-// Per-plugin high bits, derived once from the plugin's name. Plugins run in
-// isolated JS contexts that each allocate `nextPanelId` from 1, so a shared
-// base made every plugin's first panel id identical — and the host registry,
-// keyed by panel id, would have a second plugin's `mountWidgetPanel`
-// *overwrite* the first's entry (e.g. opening the theme editor evicted the
-// orchestrator dock, killing its click hit-map). Panel ids are also how a
-// plugin matches its own `widget_event`s (`e.panel_id === panel.id()`), so
-// they must be globally unique, not just unique within one plugin.
-let pluginPanelSalt: number | null = null;
-function panelSalt(): number {
-  if (pluginPanelSalt !== null) return pluginPanelSalt;
-  let name = "";
-  try {
-    name = editor.pluginName() || "";
-  } catch {
-    name = "";
-  }
-  // FNV-1a 32-bit over the plugin name → a near-unique per-plugin bucket.
-  let h = 0x811c_9dc5;
-  for (let i = 0; i < name.length; i++) {
-    h ^= name.charCodeAt(i);
-    h = Math.imul(h, 0x0100_0193);
-  }
-  pluginPanelSalt = h >>> 0;
-  return pluginPanelSalt;
-}
 function allocatePanelId(): number {
-  // Layout: 0x1_0000_0000 base (bias high, clear of the editor's small
-  // internal ids) + [32-bit plugin salt] * 2^20 + [20-bit local counter].
-  // Max ≈ 2^52, within JS's 2^53 exact-integer range. Distinct plugin names
-  // collide only on a full 32-bit hash clash — negligible for a handful of
-  // plugins — so each plugin owns a disjoint id range.
-  const id = nextPanelId++ & 0xf_ffff;
-  return 0x1_0000_0000 + panelSalt() * 0x10_0000 + id;
+  return nextPanelId++;
 }

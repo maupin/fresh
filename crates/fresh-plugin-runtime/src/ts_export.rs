@@ -682,6 +682,9 @@ interface HookEventMap {
    * click to a `Toggle` / `Button` widget node within a mounted
    * widget panel. See `docs/internal/plugin-widget-library-design.md`.
    *
+   * Panel ids are plugin-local: the host keys panels by
+   * (plugin, id) and delivers each event only to the plugin that
+   * owns the panel, so ids never need to be globally unique.
    * Routing is by `panel_id` (matches the id the plugin allocated
    * at mount time) plus `widget_key` (the stable `key` set on the
    * widget spec node, or empty when the spec did not assign one).
