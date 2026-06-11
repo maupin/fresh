@@ -1101,6 +1101,26 @@ mod tests {
         }
     }
 
+    /// A soft-break offset that lands inside a multi-byte char must be
+    /// skipped like the other malformed break positions, not panic the
+    /// slice.  This happens when the break list is stale: the plugin
+    /// recomputes breaks asynchronously, so an insert earlier in the
+    /// line shifts the text under positions computed against the old
+    /// content.
+    #[test]
+    fn stale_soft_break_inside_multibyte_char_does_not_panic() {
+        // "decorative wave " is 16 bytes, so '—' occupies bytes
+        // 16..19 of the line; a break at rel=17 is mid-char — exactly
+        // what a one-byte-stale break list yields after inserting one
+        // byte before the break.
+        let text = "decorative wave \u{2014} a rising sea of glyphs";
+        let line_start = 1043usize;
+        let breaks = [(line_start + 17, 0u16)];
+        let rows =
+            count_visual_rows_for_text_with_soft_breaks(text, line_start, &breaks, 80, 6, false);
+        assert!(rows >= 1);
+    }
+
     // -------------------------------------------------------------------
     // Layer 3 (partial): shadow-model property test.
     //
