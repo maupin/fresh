@@ -2122,7 +2122,11 @@ fn open_review_diff(harness: &mut EditorTestHarness) {
             if screen.contains("TypeError") || screen.contains("Error:") {
                 panic!("Error loading review diff. Screen:\n{}", screen);
             }
-            screen.contains("*Review Diff*") || screen.contains("Review Diff —")
+            // The "*Review Diff*" buffer tab appears as soon as the buffer is
+            // created — before the diff stream is generated asynchronously.
+            // Wait for the toolbar AND for the transient "Generating Review..."
+            // status to clear so the diff content is actually present.
+            screen.contains("next hunk") && !screen.contains("Generating Review")
         })
         .unwrap();
 }

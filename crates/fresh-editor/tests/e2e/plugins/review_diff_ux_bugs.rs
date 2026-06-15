@@ -44,7 +44,11 @@ fn open_review_diff(harness: &mut EditorTestHarness) -> String {
             if screen.contains("TypeError") || screen.contains("Error:") {
                 panic!("Error loading review diff. Screen:\n{}", screen);
             }
-            screen.contains("next hunk")
+            // The toolbar ("next hunk") renders immediately, before the diff
+            // stream finishes generating. Also wait for the transient
+            // "Generating Review..." status to clear so tests observe the
+            // actual diff content rather than an empty mid-generation frame.
+            screen.contains("next hunk") && !screen.contains("Generating Review")
         })
         .unwrap();
 

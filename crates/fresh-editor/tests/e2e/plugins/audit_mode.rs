@@ -2346,34 +2346,24 @@ fn test_review_diff_untracked_directory_files_listed() {
         .wait_until(|h| h.screen_to_string().contains("Hello"))
         .unwrap();
 
-    let _screen = open_review_diff(&mut harness);
+    open_review_diff(&mut harness);
 
-    // The file inside the new directory must be listed by name, and the
-    // "(untracked directory)" placeholder must NOT appear. Scan via PageDown
-    // since it may not be on the first viewport.
-    let mut found_file = false;
-    for _ in 0..8 {
-        let s = harness.screen_to_string();
-        assert!(
-            !s.contains("untracked directory"),
-            "The blank '(untracked directory)' placeholder must not be shown; \
-             files inside the new directory should be listed individually. Screen:\n{}",
-            s
-        );
-        if s.contains("hello.txt") {
-            found_file = true;
-            break;
-        }
-        harness
-            .send_key(KeyCode::PageDown, KeyModifiers::NONE)
-            .unwrap();
-        harness.render().unwrap();
-    }
+    // The only change in the repo is the untracked directory, so its file is
+    // on the first viewport once the diff stream finishes generating. Wait
+    // semantically for it to be listed by name (this also guarantees the async
+    // stream has completed before we assert).
+    harness
+        .wait_until(|h| h.screen_to_string().contains("hello.txt"))
+        .unwrap();
 
+    // The blank "(untracked directory)" placeholder must never be shown; the
+    // file inside the new directory is listed individually instead.
+    let screen = harness.screen_to_string();
     assert!(
-        found_file,
-        "Should list the untracked file 'hello.txt' inside the new directory. Final screen:\n{}",
-        harness.screen_to_string()
+        !screen.contains("untracked directory"),
+        "The blank '(untracked directory)' placeholder must not be shown; \
+         files inside the new directory should be listed individually. Screen:\n{}",
+        screen
     );
 
     // Focusing the file should reveal its added content as a diff, proving it
