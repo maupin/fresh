@@ -27,6 +27,7 @@ mod view_data;
 
 use crate::app::types::ViewLineMapping;
 use crate::app::BufferMetadata;
+use crate::config::IndentationGuideMode;
 use crate::model::buffer::Buffer;
 use crate::model::event::{BufferId, EventLog, LeafId, SplitDirection};
 use crate::primitives::ansi_background::AnsiBackground;
@@ -92,6 +93,7 @@ impl SplitRenderer {
         diagnostics_inline_text: bool,
         show_tilde: bool,
         highlight_current_column: bool,
+        indentation_guides: IndentationGuideMode,
         hide_current_line_on_selection: bool,
         cell_theme_map: &mut Vec<crate::app::types::CellThemeInfo>,
         screen_width: u16,
@@ -150,6 +152,7 @@ impl SplitRenderer {
             diagnostics_inline_text,
             show_tilde,
             highlight_current_column,
+            indentation_guides,
             hide_current_line_on_selection,
             cell_theme_map,
             screen_width,
@@ -237,6 +240,7 @@ impl SplitRenderer {
         diagnostics_inline_text: bool,
         show_tilde: bool,
         highlight_current_column: bool,
+        indentation_guides: IndentationGuideMode,
         cell_theme_map: &mut Vec<crate::app::types::CellThemeInfo>,
         screen_width: u16,
     ) -> Vec<crate::app::types::ViewLineMapping> {
@@ -280,6 +284,7 @@ impl SplitRenderer {
             diagnostics_inline_text,
             show_tilde,
             highlight_current_column,
+            indentation_guides,
             cell_theme_map,
             screen_width,
             &mut sink,
@@ -351,12 +356,51 @@ mod tests {
         cursor_pos: usize,
         gutters_enabled: bool,
     ) -> (LineRenderOutput, usize, bool, usize) {
+        render_output_for_with_options(
+            content,
+            cursor_pos,
+            gutters_enabled,
+            IndentationGuideMode::None,
+            0,
+        )
+    }
+
+    fn render_output_for_with_indentation_guides(
+        content: &str,
+        cursor_pos: usize,
+        left_column: usize,
+    ) -> (LineRenderOutput, usize, bool, usize) {
+        render_output_for_with_indentation_guide_mode(
+            content,
+            cursor_pos,
+            left_column,
+            IndentationGuideMode::All,
+        )
+    }
+
+    fn render_output_for_with_indentation_guide_mode(
+        content: &str,
+        cursor_pos: usize,
+        left_column: usize,
+        indentation_guides: IndentationGuideMode,
+    ) -> (LineRenderOutput, usize, bool, usize) {
+        render_output_for_with_options(content, cursor_pos, false, indentation_guides, left_column)
+    }
+
+    fn render_output_for_with_options(
+        content: &str,
+        cursor_pos: usize,
+        gutters_enabled: bool,
+        indentation_guides: IndentationGuideMode,
+        left_column: usize,
+    ) -> (LineRenderOutput, usize, bool, usize) {
         let mut state = EditorState::new(20, 6, 1024, test_fs());
         state.buffer = Buffer::from_str(content, 1024, test_fs());
         let mut cursors = crate::model::cursor::Cursors::new();
         cursors.primary_mut().position = cursor_pos.min(state.buffer.len());
         // Create a standalone viewport (no longer part of EditorState)
-        let viewport = Viewport::new(20, 4);
+        let mut viewport = Viewport::new(20, 4);
+        viewport.left_column = left_column;
         // Enable/disable line numbers/gutters based on parameter
         state.margins.left_config.enabled = gutters_enabled;
 
@@ -432,6 +476,7 @@ mod tests {
             byte_offset_mode: false, // Tests use exact line numbers
             show_tilde: true,
             highlight_current_line: true,
+            indentation_guides,
             cell_theme_map: &mut dummy_theme_map,
             screen_width: 0,
         });
@@ -442,6 +487,219 @@ mod tests {
             content.ends_with('\n'),
             selection.primary_cursor_position,
         )
+    }
+
+    fn rendered_line_text(output: &LineRenderOutput, line_idx: usize) -> String {
+        output.lines[line_idx]
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<String>()
+            .trim_end()
+            .to_string()
+    }
+
+    #[test]
+    fn indentation_guides_disabled_preserves_leading_spaces() {
+        let (output, _, _, _) = render_output_for("    let x = 1;\n", 0);
+
+        assert_eq!(rendered_line_text(&output, 0), "    let x = 1;");
+        assert!(!rendered_line_text(&output, 0).contains('│'));
+    }
+
+    #[test]
+    fn indentation_guides_render_for_space_indents_but_not_root_lines() {
+        let (output, _, _, _) = render_output_for_with_indentation_guides(
+            "fn main()\n    let child = 1;\n        let grandchild = 2;\nroot\n",
+            0,
+            0,
+        );
+
+        assert_eq!(rendered_line_text(&output, 0), "fn main()");
+        assert_eq!(rendered_line_text(&output, 1), "│   let child = 1;");
+        assert_eq!(
+            rendered_line_text(&output, 2),
+            "│   │   let grandchild = 2;"
+        );
+        assert_eq!(rendered_line_text(&output, 3), "root");
+    }
+
+    #[test]
+    fn indentation_guides_resume_after_lower_indent_line() {
+        let (output, _, _, _) = render_output_for_with_indentation_guides(
+            "        before\n    lower\n        after\n",
+            0,
+            0,
+        );
+
+        assert_eq!(rendered_line_text(&output, 0), "│   │   before");
+        assert_eq!(rendered_line_text(&output, 1), "│   lower");
+        assert_eq!(rendered_line_text(&output, 2), "│   │   after");
+    }
+
+    #[test]
+    fn indentation_guides_render_for_tabs() {
+        let (output, _, _, _) =
+            render_output_for_with_indentation_guides("\tchild\n\t\tgrand\n", 0, 0);
+
+        assert_eq!(rendered_line_text(&output, 0), "│   child");
+        assert_eq!(rendered_line_text(&output, 1), "│   │   grand");
+    }
+
+    #[test]
+    fn indentation_guides_respect_horizontal_scroll() {
+        let (output, _, _, _) = render_output_for_with_indentation_guides("        grand\n", 0, 4);
+
+        assert_eq!(rendered_line_text(&output, 0), "│   grand");
+    }
+
+    #[test]
+    fn indentation_guides_active_mode_renders_only_innermost_active_block() {
+        let content = "    if ready {\n        inner\n        sibling\n    }\n";
+        let cursor_pos = content.find("inner").unwrap();
+        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
+            content,
+            cursor_pos,
+            0,
+            IndentationGuideMode::Active,
+        );
+
+        assert_eq!(rendered_line_text(&output, 0), "    if ready {");
+        assert_eq!(rendered_line_text(&output, 1), "    │   inner");
+        assert_eq!(rendered_line_text(&output, 2), "    │   sibling");
+        assert_eq!(rendered_line_text(&output, 3), "    }");
+    }
+
+    #[test]
+    fn indentation_guides_active_mode_updates_when_cursor_changes_blocks() {
+        let content = "    first\n        nested\n    second\n";
+
+        let outer_cursor = content.find("first").unwrap();
+        let (outer_output, _, _, _) = render_output_for_with_indentation_guide_mode(
+            content,
+            outer_cursor,
+            0,
+            IndentationGuideMode::Active,
+        );
+        assert_eq!(rendered_line_text(&outer_output, 0), "│   first");
+        assert_eq!(rendered_line_text(&outer_output, 1), "│       nested");
+        assert_eq!(rendered_line_text(&outer_output, 2), "│   second");
+
+        let nested_cursor = content.find("nested").unwrap();
+        let (nested_output, _, _, _) = render_output_for_with_indentation_guide_mode(
+            content,
+            nested_cursor,
+            0,
+            IndentationGuideMode::Active,
+        );
+        assert_eq!(rendered_line_text(&nested_output, 0), "    first");
+        assert_eq!(rendered_line_text(&nested_output, 1), "    │   nested");
+        assert_eq!(rendered_line_text(&nested_output, 2), "    second");
+    }
+
+    #[test]
+    fn indentation_guides_active_mode_supports_tabs() {
+        let content = "\tchild\n\t\tgrand\n";
+        let cursor_pos = content.find("grand").unwrap();
+        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
+            content,
+            cursor_pos,
+            0,
+            IndentationGuideMode::Active,
+        );
+
+        // Tab cells that are not replaced by the active guide retain the
+        // existing leading-tab whitespace indicator.
+        assert_eq!(rendered_line_text(&output, 0), "→   child");
+        assert_eq!(rendered_line_text(&output, 1), "→   │   grand");
+    }
+
+    #[test]
+    fn indentation_guides_active_mode_opening_delimiter_prefers_child_block() {
+        let content = "    if (1) {\n        // test\n    }\n";
+        let cursor_pos = content.find('{').unwrap() + 1;
+        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
+            content,
+            cursor_pos,
+            0,
+            IndentationGuideMode::Active,
+        );
+
+        assert_eq!(rendered_line_text(&output, 0), "    if (1) {");
+        assert_eq!(rendered_line_text(&output, 1), "    │   // test");
+        assert_eq!(rendered_line_text(&output, 2), "    }");
+    }
+
+    #[test]
+    fn indentation_guides_active_mode_before_opening_delimiter_uses_current_block() {
+        let content = "    if (1) {\n        // test\n    }\n";
+        let cursor_pos = content.find('{').unwrap() - 1;
+        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
+            content,
+            cursor_pos,
+            0,
+            IndentationGuideMode::Active,
+        );
+
+        assert_eq!(rendered_line_text(&output, 0), "│   if (1) {");
+        assert_eq!(rendered_line_text(&output, 1), "│       // test");
+        assert_eq!(rendered_line_text(&output, 2), "│   }");
+    }
+
+    #[test]
+    fn indentation_guides_active_mode_closing_delimiter_prefers_closed_block() {
+        let content = "    if (1) {\n        // test\n    }\n";
+        let cursor_pos = content.find("    }").unwrap() + 4;
+        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
+            content,
+            cursor_pos,
+            0,
+            IndentationGuideMode::Active,
+        );
+
+        assert_eq!(rendered_line_text(&output, 0), "    if (1) {");
+        assert_eq!(rendered_line_text(&output, 1), "    │   // test");
+        assert_eq!(rendered_line_text(&output, 2), "    }");
+    }
+
+    #[test]
+    fn indentation_guides_active_mode_after_closing_delimiter_prefers_closed_block() {
+        let content = "    if (1) {\n        // test\n    }\n";
+        let cursor_pos = content.find("    }").unwrap() + 5;
+        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
+            content,
+            cursor_pos,
+            0,
+            IndentationGuideMode::Active,
+        );
+
+        assert_eq!(rendered_line_text(&output, 0), "    if (1) {");
+        assert_eq!(rendered_line_text(&output, 1), "    │   // test");
+        assert_eq!(rendered_line_text(&output, 2), "    }");
+    }
+
+    #[test]
+    fn indentation_guides_all_mode_ignores_delimiter_affinity() {
+        let content = "    if (1) {\n        // test\n    }\n";
+        let cursor_pos = content.find('{').unwrap() + 1;
+        let (output, _, _, _) = render_output_for_with_indentation_guides(content, cursor_pos, 0);
+
+        assert_eq!(rendered_line_text(&output, 0), "│   if (1) {");
+        assert_eq!(rendered_line_text(&output, 1), "│   │   // test");
+        assert_eq!(rendered_line_text(&output, 2), "│   }");
+    }
+
+    #[test]
+    fn indentation_guides_active_mode_skips_root_cursor_line() {
+        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
+            "root\n    child\n",
+            0,
+            0,
+            IndentationGuideMode::Active,
+        );
+
+        assert_eq!(rendered_line_text(&output, 0), "root");
+        assert_eq!(rendered_line_text(&output, 1), "    child");
     }
 
     #[test]
@@ -2358,6 +2616,7 @@ mod tests {
             byte_offset_mode: false,
             show_tilde: true,
             highlight_current_line,
+            indentation_guides: IndentationGuideMode::None,
             cell_theme_map: &mut Vec::new(),
             screen_width: 0,
         })

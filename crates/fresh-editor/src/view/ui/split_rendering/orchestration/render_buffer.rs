@@ -19,6 +19,7 @@ use super::contexts::SelectionContext;
 use super::overlays::{decoration_context, selection_context};
 use super::render_line::{render_view_lines, LastLineEnd, LineRenderInput, LineRenderOutput};
 use crate::app::types::{CellThemeInfo, ViewLineMapping};
+use crate::config::IndentationGuideMode;
 use crate::model::cursor::Cursors;
 use crate::model::event::{BufferId, EventLog};
 use crate::primitives::ansi_background::AnsiBackground;
@@ -110,6 +111,7 @@ pub(crate) fn compute_buffer_layout(
     highlight_current_line: bool,
     diagnostics_inline_text: bool,
     show_tilde: bool,
+    indentation_guides: IndentationGuideMode,
     cell_theme_map: Option<(&mut Vec<CellThemeInfo>, u16)>,
 ) -> BufferLayoutOutput {
     let _span = tracing::trace_span!("compute_buffer_layout").entered();
@@ -379,6 +381,7 @@ pub(crate) fn compute_buffer_layout(
         byte_offset_mode,
         show_tilde,
         highlight_current_line,
+        indentation_guides,
         cell_theme_map: map_ref,
         screen_width: sw,
     });
@@ -598,6 +601,7 @@ pub(crate) fn render_buffer_in_split(
     diagnostics_inline_text: bool,
     show_tilde: bool,
     highlight_current_column: bool,
+    indentation_guides: IndentationGuideMode,
     cell_theme_map: &mut Vec<CellThemeInfo>,
     screen_width: u16,
     pending_hardware_cursor: &mut Option<(u16, u16)>,
@@ -624,6 +628,7 @@ pub(crate) fn render_buffer_in_split(
         highlight_current_line,
         diagnostics_inline_text,
         show_tilde,
+        indentation_guides,
         Some((cell_theme_map, screen_width)),
     );
 

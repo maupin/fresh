@@ -30,6 +30,7 @@ use super::scrollbar::{
 };
 use crate::app::types::ViewLineMapping;
 use crate::app::BufferMetadata;
+use crate::config::IndentationGuideMode;
 use crate::model::buffer::Buffer;
 use crate::model::event::{BufferId, EventLog, LeafId, SplitDirection};
 use crate::primitives::ansi_background::AnsiBackground;
@@ -118,6 +119,7 @@ pub(crate) fn render_content(
     diagnostics_inline_text: bool,
     show_tilde: bool,
     highlight_current_column: bool,
+    indentation_guides: IndentationGuideMode,
     hide_current_line_on_selection: bool,
     cell_theme_map: &mut Vec<crate::app::types::CellThemeInfo>,
     screen_width: u16,
@@ -474,6 +476,7 @@ pub(crate) fn render_content(
                 diagnostics_inline_text,
                 split_show_tilde,
                 highlight_current_column && state.show_cursors,
+                indentation_guides,
                 cell_theme_map,
                 screen_width,
                 pending_hardware_cursor,
@@ -1139,6 +1142,7 @@ pub(crate) fn compute_content_layout(
             effective_highlight_current_line,
             diagnostics_inline_text,
             show_tilde,
+            IndentationGuideMode::None,
             None, // No cell theme map for layout-only computation
         );
 

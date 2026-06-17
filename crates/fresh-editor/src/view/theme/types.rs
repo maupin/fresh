@@ -534,6 +534,11 @@ pub struct EditorColors {
     /// Vertical ruler background color
     #[serde(default = "default_ruler_bg")]
     pub ruler_bg: ColorDef,
+    /// Indentation guide foreground color. When omitted, inherits
+    /// `whitespace_indicator_fg` so guides remain subtle in both dark and
+    /// light themes while still allowing a dedicated override.
+    #[serde(default)]
+    pub indentation_guide_fg: Option<ColorDef>,
     /// Whitespace indicator foreground color (for tab arrows and space dots)
     #[serde(default = "default_whitespace_indicator_fg")]
     pub whitespace_indicator_fg: ColorDef,
@@ -1313,6 +1318,9 @@ pub struct Theme {
     // Vertical ruler color
     pub ruler_bg: Color,
 
+    // Indentation guide color
+    pub indentation_guide_fg: Color,
+
     // Whitespace indicator color (tab arrows, space dots)
     pub whitespace_indicator_fg: Color,
 
@@ -1517,6 +1525,12 @@ impl From<ThemeFile> for Theme {
                 .map(|c| c.into())
                 .unwrap_or_else(|| shade_toward_contrast(file.editor.bg.clone().into(), 10)),
             ruler_bg: file.editor.ruler_bg.into(),
+            indentation_guide_fg: file
+                .editor
+                .indentation_guide_fg
+                .clone()
+                .unwrap_or_else(|| file.editor.whitespace_indicator_fg.clone())
+                .into(),
             whitespace_indicator_fg: file.editor.whitespace_indicator_fg.into(),
             bracket_match_fg: file.editor.bracket_match_fg.into(),
             bracket_rainbow_1: file.editor.bracket_rainbow_1.into(),
@@ -1761,6 +1775,7 @@ impl From<Theme> for ThemeFile {
                 diff_remove_collision_fg: theme.diff_remove_collision_fg.map(|c| c.into()),
                 diff_modify_collision_fg: theme.diff_modify_collision_fg.map(|c| c.into()),
                 ruler_bg: theme.ruler_bg.into(),
+                indentation_guide_fg: Some(theme.indentation_guide_fg.into()),
                 whitespace_indicator_fg: theme.whitespace_indicator_fg.into(),
                 bracket_match_fg: theme.bracket_match_fg.into(),
                 bracket_rainbow_1: theme.bracket_rainbow_1.into(),
@@ -1969,6 +1984,17 @@ fn apply_theme_overrides(theme: &mut Theme, theme_file: &ThemeFile, raw: &serde_
             }
         }
     }
+
+    if raw
+        .get("editor")
+        .and_then(|v| v.as_object())
+        .is_some_and(|editor| {
+            editor.contains_key("whitespace_indicator_fg")
+                && !editor.contains_key("indentation_guide_fg")
+        })
+    {
+        theme.indentation_guide_fg = theme.whitespace_indicator_fg;
+    }
 }
 
 impl Theme {
@@ -2122,6 +2148,7 @@ theme_color_keys! {
         "diff_remove_highlight_bg" => color diff_remove_highlight_bg,
         "fg" => color editor_fg,
         "inactive_cursor" => color inactive_cursor,
+        "indentation_guide_fg" => color indentation_guide_fg,
         "line_number_bg" => color line_number_bg,
         "line_number_fg" => color line_number_fg,
         "ruler_bg" => color ruler_bg,
@@ -2570,6 +2597,34 @@ mod tests {
         // The hardcoded `default_editor_bg` is `Rgb(30, 30, 30)`. Pin that so
         // a future change to the default prompts a deliberate test update.
         assert_eq!(theme.editor_bg, Color::Rgb(30, 30, 30));
+    }
+
+    #[test]
+    fn test_indentation_guide_fg_inherits_whitespace_indicator_fg_when_omitted() {
+        let json = r#"{
+            "name": "x",
+            "extends": "builtin://dark",
+            "editor": { "whitespace_indicator_fg": [12, 34, 56] }
+        }"#;
+        let theme = Theme::from_json(json).expect("should parse");
+
+        assert_eq!(theme.whitespace_indicator_fg, Color::Rgb(12, 34, 56));
+        assert_eq!(theme.indentation_guide_fg, Color::Rgb(12, 34, 56));
+    }
+
+    #[test]
+    fn test_explicit_indentation_guide_fg_overrides_whitespace_fallback() {
+        let json = r#"{
+            "name": "x",
+            "editor": {
+                "whitespace_indicator_fg": [12, 34, 56],
+                "indentation_guide_fg": [65, 67, 69]
+            }
+        }"#;
+        let theme = Theme::from_json(json).expect("should parse");
+
+        assert_eq!(theme.whitespace_indicator_fg, Color::Rgb(12, 34, 56));
+        assert_eq!(theme.indentation_guide_fg, Color::Rgb(65, 67, 69));
     }
 
     /// `name` remains the only truly required top-level field. A theme JSON

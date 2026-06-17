@@ -18,6 +18,12 @@ Some keybindings may not work or may differ on your system due to differences in
 
 Add column rulers at any position via "Add Ruler" from the command palette. Useful for enforcing line length limits. Remove with "Remove Ruler". Rulers are per-buffer. The `rulers` config setting can also set default rulers (e.g. `[80, 120]`).
 
+## Indentation Guides
+
+Show vertical indentation guides with the `editor.indentation_guides` setting. The default is `"none"`, so existing editor rendering is unchanged unless guides are enabled. Use `"all"` to draw every indentation level in leading whitespace, or `"active"` to draw only the innermost guide for the cursor's current indentation block.
+
+Guides are visual-only: they replace rendered leading whitespace cells without changing buffer text, cursor positions, byte mappings, or mouse behavior. Themes can customize the guide color with `indentation_guide_fg`; when omitted, it inherits `whitespace_indicator_fg`.
+
 ## Current-Line Highlight
 
 The row the cursor is on is highlighted for quick visual tracking. Enabled by default; toggle via the command palette ("Toggle Current Line Highlight") or in the Settings UI. A matching **Toggle Current Column Highlight** / `highlight_current_column` setting highlights the cursor's column too — useful for visually aligning code with rulers.

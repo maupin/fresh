@@ -5,8 +5,8 @@
 
 use crate::config::{
     ClipboardConfig, CursorStyle, FileBrowserConfig, FileExplorerConfig, FormatterConfig,
-    Keybinding, KeybindingMapName, KeymapConfig, LanguageConfig, LineEndingOption, OnSaveAction,
-    PluginConfig, TerminalConfig, ThemeName, WarningsConfig,
+    IndentationGuideMode, Keybinding, KeybindingMapName, KeymapConfig, LanguageConfig,
+    LineEndingOption, OnSaveAction, PluginConfig, TerminalConfig, ThemeName, WarningsConfig,
 };
 use crate::types::LspLanguageConfig;
 use serde::{Deserialize, Serialize};
@@ -218,6 +218,7 @@ pub struct PartialEditorConfig {
     pub set_window_title: Option<bool>,
     pub terminal_auto_title: Option<bool>,
     pub rulers: Option<Vec<usize>>,
+    pub indentation_guides: Option<IndentationGuideMode>,
     pub whitespace_show: Option<bool>,
     pub whitespace_spaces_leading: Option<bool>,
     pub whitespace_spaces_inner: Option<bool>,
@@ -336,6 +337,8 @@ impl Merge for PartialEditorConfig {
         self.terminal_auto_title
             .merge_from(&other.terminal_auto_title);
         self.rulers.merge_from(&other.rulers);
+        self.indentation_guides
+            .merge_from(&other.indentation_guides);
         self.whitespace_show.merge_from(&other.whitespace_show);
         self.whitespace_spaces_leading
             .merge_from(&other.whitespace_spaces_leading);
@@ -650,6 +653,7 @@ impl From<&crate::config::EditorConfig> for PartialEditorConfig {
             set_window_title: Some(cfg.set_window_title),
             terminal_auto_title: Some(cfg.terminal_auto_title),
             rulers: Some(cfg.rulers.clone()),
+            indentation_guides: Some(cfg.indentation_guides),
             whitespace_show: Some(cfg.whitespace_show),
             whitespace_spaces_leading: Some(cfg.whitespace_spaces_leading),
             whitespace_spaces_inner: Some(cfg.whitespace_spaces_inner),
@@ -821,6 +825,9 @@ impl PartialEditorConfig {
                 .terminal_auto_title
                 .unwrap_or(defaults.terminal_auto_title),
             rulers: self.rulers.unwrap_or_else(|| defaults.rulers.clone()),
+            indentation_guides: self
+                .indentation_guides
+                .unwrap_or(defaults.indentation_guides),
             whitespace_show: self.whitespace_show.unwrap_or(defaults.whitespace_show),
             whitespace_spaces_leading: self
                 .whitespace_spaces_leading

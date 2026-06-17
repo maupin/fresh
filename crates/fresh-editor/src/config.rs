@@ -225,6 +225,38 @@ impl JsonSchema for CursorStyle {
     }
 }
 
+/// Indentation guide rendering mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndentationGuideMode {
+    /// Do not render indentation guides.
+    #[default]
+    None,
+    /// Render every indentation guide level in leading whitespace.
+    All,
+    /// Render only the innermost guide for the active cursor's indentation block.
+    Active,
+}
+
+impl IndentationGuideMode {
+    pub const OPTIONS: &'static [&'static str] = &["none", "all", "active"];
+}
+
+impl JsonSchema for IndentationGuideMode {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("IndentationGuideMode")
+    }
+
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Indentation guide rendering mode.",
+            "type": "string",
+            "enum": Self::OPTIONS,
+            "default": "none"
+        })
+    }
+}
+
 /// Newtype for keybinding map name that generates proper JSON Schema with enum options
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -1143,6 +1175,20 @@ pub struct EditorConfig {
     #[schemars(extend("x-section" = "Display"))]
     pub rulers: Vec<usize>,
 
+    /// Vertical indentation guide rendering mode.
+    /// Guides are drawn at indentation levels derived from the active buffer's
+    /// tab size. They replace existing leading whitespace cells visually only;
+    /// buffer text, cursor positions, and mouse mappings are unchanged.
+    /// Modes:
+    /// - `none`: disable indentation guides.
+    /// - `all`: draw every indentation level in leading whitespace.
+    /// - `active`: draw only the innermost guide for the cursor's current
+    ///   indentation block.
+    /// Default: none
+    #[serde(default)]
+    #[schemars(extend("x-section" = "Display"))]
+    pub indentation_guides: IndentationGuideMode,
+
     // ===== Whitespace =====
     /// Master toggle for whitespace indicator visibility.
     /// When disabled, no whitespace indicators (·, →) are shown regardless
@@ -1720,6 +1766,7 @@ impl Default for EditorConfig {
             set_window_title: true,
             terminal_auto_title: true,
             rulers: Vec::new(),
+            indentation_guides: IndentationGuideMode::None,
             whitespace_show: true,
             whitespace_spaces_leading: false,
             whitespace_spaces_inner: false,
@@ -7641,6 +7688,29 @@ mod tests {
 
         assert_eq!(config.editor.tab_size, loaded.editor.tab_size);
         assert_eq!(config.theme, loaded.theme);
+    }
+
+    #[test]
+    fn test_indentation_guide_mode_rejects_booleans() {
+        assert!(
+            serde_json::from_str::<Config>(r#"{"editor":{"indentation_guides":false}}"#).is_err()
+        );
+        assert!(
+            serde_json::from_str::<Config>(r#"{"editor":{"indentation_guides":true}}"#).is_err()
+        );
+    }
+
+    #[test]
+    fn test_indentation_guide_mode_accepts_string_modes() {
+        for (value, expected) in [
+            ("none", IndentationGuideMode::None),
+            ("all", IndentationGuideMode::All),
+            ("active", IndentationGuideMode::Active),
+        ] {
+            let json = format!(r#"{{"editor":{{"indentation_guides":"{}"}}}}"#, value);
+            let cfg: Config = serde_json::from_str(&json).unwrap();
+            assert_eq!(cfg.editor.indentation_guides, expected);
+        }
     }
 
     #[test]

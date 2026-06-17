@@ -81,6 +81,7 @@
           50,
           50
         ],
+        "indentation_guide_fg": null,
         "whitespace_indicator_fg": [
           70,
           70,
@@ -667,6 +668,18 @@
             50,
             50
           ]
+        },
+        "indentation_guide_fg": {
+          "description": "Indentation guide foreground color. When omitted, inherits\n`whitespace_indicator_fg` so guides remain subtle in both dark and\nlight themes while still allowing a dedicated override.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "whitespace_indicator_fg": {
           "description": "Whitespace indicator foreground color (for tab arrows and space dots)",

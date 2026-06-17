@@ -719,6 +719,7 @@ impl Editor {
                     self.config.editor.diagnostics_inline_text,
                     self.config.editor.show_tilde,
                     self.config.editor.highlight_current_column,
+                    self.config.editor.indentation_guides,
                     self.config.editor.hide_current_line_on_selection,
                     __cell_theme_map_mut,
                     size.width,
@@ -2354,6 +2355,7 @@ impl Editor {
                     self.config.editor.diagnostics_inline_text,
                     false, // hide tilde markers in the preview
                     self.config.editor.highlight_current_column,
+                    self.config.editor.indentation_guides,
                     self.config.editor.hide_current_line_on_selection,
                     &mut scratch_cell_theme_map,
                     inner.width,
@@ -3378,6 +3380,7 @@ impl Editor {
                 let diagnostics_inline_text = self.config.editor.diagnostics_inline_text;
                 let show_tilde = false; // preview hides tilde markers
                 let highlight_current_column = self.config.editor.highlight_current_column;
+                let indentation_guides = self.config.editor.indentation_guides;
                 let screen_width = frame.area().width;
 
                 let ansi_ref = self.ansi_background.as_ref();
@@ -3448,6 +3451,7 @@ impl Editor {
                         diagnostics_inline_text,
                         show_tilde,
                         highlight_current_column,
+                        indentation_guides,
                         cell_theme_map,
                         screen_width,
                     );

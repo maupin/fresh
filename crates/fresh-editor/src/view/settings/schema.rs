@@ -963,6 +963,32 @@ mod tests {
     }
 
     #[test]
+    fn test_indentation_guides_generated_schema_renders_as_enum() {
+        let categories = parse_schema(include_str!("../../../plugins/config-schema.json")).unwrap();
+        let editor = categories
+            .iter()
+            .find(|c| c.path == "/editor")
+            .expect("editor category should exist");
+        let indentation_guides = editor
+            .settings
+            .iter()
+            .find(|s| s.path == "/editor/indentation_guides")
+            .expect("indentation_guides setting should exist");
+
+        match &indentation_guides.setting_type {
+            SettingType::Enum { options } => {
+                let values: Vec<&str> =
+                    options.iter().map(|option| option.value.as_str()).collect();
+                assert_eq!(values, vec!["none", "all", "active"]);
+            }
+            other => panic!(
+                "expected indentation_guides to render as enum, got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
     fn test_humanize_name() {
         assert_eq!(humanize_name("tab_size"), "Tab Size");
         assert_eq!(humanize_name("line_numbers"), "Line Numbers");

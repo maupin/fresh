@@ -21,6 +21,7 @@ use super::super::overlay_sweep::OverlayActiveSet;
 use super::super::selection_sweep::SelectionActiveSet;
 use super::{cursor_indicator_style, CursorTracker, SpanCursors};
 use crate::app::types::CellThemeInfo;
+use crate::config::IndentationGuideMode;
 use crate::primitives::ansi::AnsiParser;
 use crate::primitives::display_width::char_width;
 use crate::state::EditorState;
@@ -58,6 +59,10 @@ pub(super) struct CellPassInput<'a> {
     pub session_mode: bool,
     pub is_on_cursor_line: bool,
     pub highlight_current_line: bool,
+    pub indentation_guides: IndentationGuideMode,
+    /// In active mode, the one guide column to draw for this line when it is
+    /// inside the active cursor's indentation block.
+    pub active_indentation_guide_col: Option<usize>,
 }
 
 /// Per-line results the later passes consume.
@@ -284,12 +289,21 @@ impl CellPass<'_, '_> {
         // `indicator_buf` holds the UTF-8 bytes of a single char on the
         // stack — no heap allocation per cell.
         let mut indicator_buf = [0u8; 4];
-        let (display_char, is_whitespace_indicator) =
-            self.display_cell_text(ch, is_cursor, is_tab_start, &mut indicator_buf);
+        let is_lsp_cursor = is_cursor && self.input.lsp_waiting && self.input.is_active;
+        let is_indentation_guide = !is_lsp_cursor && self.is_indentation_guide_cell(ch, byte_pos);
+        let (display_char, is_whitespace_indicator) = if is_indentation_guide {
+            let guide_char: &str = '│'.encode_utf8(&mut indicator_buf);
+            (guide_char, false)
+        } else {
+            self.display_cell_text(ch, is_cursor, is_tab_start, &mut indicator_buf)
+        };
 
-        // Apply subdued whitespace indicator color from theme
+        // Apply subdued indicator colors from theme. Cursor / selection styling
+        // keeps precedence so guides do not obscure caret and selection state.
         let mut style = resolved.style;
-        if is_whitespace_indicator && !is_cursor && !is_selected {
+        if is_indentation_guide && !is_cursor && !is_selected {
+            style = style.fg(self.input.theme.indentation_guide_fg);
+        } else if is_whitespace_indicator && !is_cursor && !is_selected {
             style = style.fg(self.input.theme.whitespace_indicator_fg);
         }
 
@@ -298,6 +312,58 @@ impl CellPass<'_, '_> {
         }
 
         self.place_cell_cursor(ch, byte_pos, is_cursor, resolved.is_secondary_cursor);
+    }
+
+    /// Whether the current leading-whitespace cell should render as an
+    /// indentation guide. Guides are visual-only replacements for existing
+    /// source whitespace cells, so they preserve byte mappings and do not draw
+    /// through code or synthetic/injected content.
+    fn is_indentation_guide_cell(&self, ch: char, byte_pos: Option<usize>) -> bool {
+        if matches!(self.input.indentation_guides, IndentationGuideMode::None)
+            || ch != ' '
+            || byte_pos.is_none()
+        {
+            return false;
+        }
+
+        if matches!(
+            self.input.view_line.line_start,
+            LineStart::AfterBreak | LineStart::AfterInjectedNewline
+        ) {
+            return false;
+        }
+
+        if self.input.view_line.source_start_byte.is_none() {
+            return false;
+        }
+
+        if !self.is_leading_indent_cell() {
+            return false;
+        }
+
+        match self.input.indentation_guides {
+            IndentationGuideMode::None => false,
+            IndentationGuideMode::All => {
+                let tab_size = match self.input.state.buffer_settings.tab_size {
+                    0 => 4,
+                    n => n,
+                };
+                self.col_offset % tab_size == 0
+            }
+            IndentationGuideMode::Active => {
+                self.input.active_indentation_guide_col == Some(self.col_offset)
+            }
+        }
+    }
+
+    fn is_leading_indent_cell(&self) -> bool {
+        match self.non_ws {
+            (Some(first), _) => self.display_char_idx < first,
+            // All-whitespace lines: every rendered space is leading
+            // indentation. Newline characters are excluded by the caller's
+            // `ch == ' '` check.
+            _ => true,
+        }
     }
 
     /// Whether a cursor should render on this cell.
