@@ -219,6 +219,7 @@ pub struct PartialEditorConfig {
     pub terminal_auto_title: Option<bool>,
     pub rulers: Option<Vec<usize>>,
     pub indentation_guides: Option<IndentationGuideMode>,
+    pub indentation_guide_glyph: Option<String>,
     pub whitespace_show: Option<bool>,
     pub whitespace_spaces_leading: Option<bool>,
     pub whitespace_spaces_inner: Option<bool>,
@@ -339,6 +340,8 @@ impl Merge for PartialEditorConfig {
         self.rulers.merge_from(&other.rulers);
         self.indentation_guides
             .merge_from(&other.indentation_guides);
+        self.indentation_guide_glyph
+            .merge_from(&other.indentation_guide_glyph);
         self.whitespace_show.merge_from(&other.whitespace_show);
         self.whitespace_spaces_leading
             .merge_from(&other.whitespace_spaces_leading);
@@ -654,6 +657,7 @@ impl From<&crate::config::EditorConfig> for PartialEditorConfig {
             terminal_auto_title: Some(cfg.terminal_auto_title),
             rulers: Some(cfg.rulers.clone()),
             indentation_guides: Some(cfg.indentation_guides),
+            indentation_guide_glyph: Some(cfg.indentation_guide_glyph.clone()),
             whitespace_show: Some(cfg.whitespace_show),
             whitespace_spaces_leading: Some(cfg.whitespace_spaces_leading),
             whitespace_spaces_inner: Some(cfg.whitespace_spaces_inner),
@@ -828,6 +832,10 @@ impl PartialEditorConfig {
             indentation_guides: self
                 .indentation_guides
                 .unwrap_or(defaults.indentation_guides),
+            indentation_guide_glyph: self
+                .indentation_guide_glyph
+                .map(|glyph| crate::config::normalize_indentation_guide_glyph(&glyph))
+                .unwrap_or_else(|| defaults.indentation_guide_glyph.clone()),
             whitespace_show: self.whitespace_show.unwrap_or(defaults.whitespace_show),
             whitespace_spaces_leading: self
                 .whitespace_spaces_leading
@@ -1588,6 +1596,31 @@ mod tests {
 
         assert_eq!(resolved.editor.tab_size, 2);
         assert!(!resolved.editor.line_numbers);
+    }
+
+    #[test]
+    fn resolve_normalizes_indentation_guide_glyph() {
+        let partial = PartialConfig {
+            editor: Some(PartialEditorConfig {
+                indentation_guide_glyph: Some("  ┊  ".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let resolved = partial.resolve();
+        assert_eq!(resolved.editor.indentation_guide_glyph, "┊");
+
+        let partial = PartialConfig {
+            editor: Some(PartialEditorConfig {
+                indentation_guide_glyph: Some("   ".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let resolved = partial.resolve();
+        assert_eq!(resolved.editor.indentation_guide_glyph, "▏");
     }
 
     #[test]

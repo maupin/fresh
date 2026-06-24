@@ -98,6 +98,7 @@ fn test_issue_806_external_config_edits_lost_on_settings_save() {
     harness
         .send_key(KeyCode::Char('s'), KeyModifiers::CONTROL)
         .unwrap();
+
     harness.render().unwrap();
 
     // Verify settings is closed

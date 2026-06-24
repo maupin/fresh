@@ -228,42 +228,7 @@ impl Editor {
             }
         }
 
-        // Propagate tab_size/use_tabs/auto_close/whitespace visibility to all open buffers
-        // Each buffer resolves its settings from its language + the new global config
-        for (_, state) in self
-            .windows
-            .get_mut(&self.active_window)
-            .map(|w| &mut w.buffers)
-            .expect("active window present")
-        {
-            let mut whitespace =
-                crate::config::WhitespaceVisibility::from_editor_config(&self.config.editor);
-            state.buffer_settings.auto_close = self.config.editor.auto_close;
-            if let Some(lang_config) = self.config.languages.get(&state.language) {
-                state.buffer_settings.tab_size =
-                    lang_config.tab_size.unwrap_or(self.config.editor.tab_size);
-                state.buffer_settings.use_tabs =
-                    lang_config.use_tabs.unwrap_or(self.config.editor.use_tabs);
-                whitespace =
-                    whitespace.with_language_tab_override(lang_config.show_whitespace_tabs);
-                // Auto close: language override (only if globally enabled)
-                if state.buffer_settings.auto_close {
-                    if let Some(lang_auto_close) = lang_config.auto_close {
-                        state.buffer_settings.auto_close = lang_auto_close;
-                    }
-                }
-                // Word characters: from language config
-                if let Some(ref wc) = lang_config.word_characters {
-                    state.buffer_settings.word_characters = wc.clone();
-                } else {
-                    state.buffer_settings.word_characters.clear();
-                }
-            } else {
-                state.buffer_settings.tab_size = self.config.editor.tab_size;
-                state.buffer_settings.use_tabs = self.config.editor.use_tabs;
-            }
-            state.buffer_settings.whitespace = whitespace;
-        }
+        self.refresh_open_buffer_settings_from_config();
 
         // Save ONLY the changes to disk (preserves external edits to the config file)
         let resolver =
@@ -278,6 +243,15 @@ impl Editor {
 
         match resolver.save_changes_to_layer(&pending_changes, &pending_deletions, target_layer) {
             Ok(()) => {
+                // Re-resolve from disk after saving so the live in-memory config
+                // follows exactly the same normalization/merge path as restart
+                // and manual reload. This matters for schema text fields whose
+                // saved representation may be normalized before persistence.
+                if let Ok(resolved_config) = resolver.resolve() {
+                    self.set_config(resolved_config);
+                    self.refresh_open_buffer_settings_from_config();
+                    self.invalidate_live_editor_layout_after_settings_save();
+                }
                 self.set_status_message(
                     t!("settings.saved_to_layer", layer = layer_name).to_string(),
                 );
@@ -285,12 +259,52 @@ impl Editor {
                 // from the updated config. This fixes issue #474 where reopening
                 // settings after save would show stale values.
                 self.settings_state = None;
+                // Settings can change single-cell glyphs used by the renderer.
+                // Force a hardware redraw after closing the modal so any cells
+                // previously painted with wider temporary/input text are cleared
+                // immediately instead of lingering until a restart or resize.
+                self.request_full_redraw();
             }
             Err(e) => {
                 self.set_status_message(
                     t!("settings.failed_to_save", error = e.to_string()).to_string(),
                 );
             }
+        }
+    }
+
+    fn refresh_open_buffer_settings_from_config(&mut self) {
+        let config = self.config.clone();
+        for window in self.windows.values_mut() {
+            for state in window.buffers.as_map_mut().values_mut() {
+                let resolved = crate::config::BufferConfig::resolve(&config, Some(&state.language));
+                state.buffer_settings.tab_size = resolved.tab_size;
+                state.buffer_settings.use_tabs = resolved.use_tabs;
+                state.buffer_settings.auto_close = resolved.auto_close;
+                state.buffer_settings.auto_surround = resolved.auto_surround;
+                state.buffer_settings.whitespace = resolved.whitespace;
+                state.buffer_settings.word_characters = resolved.word_characters;
+            }
+        }
+    }
+
+    fn invalidate_live_editor_layout_after_settings_save(&mut self) {
+        for window in self.windows.values_mut() {
+            for state in window.buffers.as_map_mut().values_mut() {
+                state.line_wrap_cache.clear();
+                state.visual_row_index.clear();
+            }
+
+            if let Some((_, view_states)) = window.buffers.splits_mut() {
+                for view_state in view_states.values_mut() {
+                    view_state.invalidate_layout();
+                    for buffer_view_state in view_state.keyed_states.values_mut() {
+                        buffer_view_state.viewport.wrap_row_cache.clear();
+                    }
+                }
+            }
+
+            window.layout_cache.view_line_mappings.clear();
         }
     }
 

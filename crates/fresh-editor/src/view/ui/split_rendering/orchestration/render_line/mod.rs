@@ -81,6 +81,8 @@ pub(crate) struct LineRenderInput<'a> {
     pub highlight_current_line: bool,
     /// Indentation guide rendering mode.
     pub indentation_guides: IndentationGuideMode,
+    /// Glyph used when an indentation guide is drawn.
+    pub indentation_guide_glyph: &'a str,
     /// Per-cell theme key map for the theme inspector (screen_width used for indexing)
     pub cell_theme_map: &'a mut Vec<crate::app::types::CellThemeInfo>,
     /// Screen width for cell_theme_map indexing
@@ -155,14 +157,15 @@ impl ActiveIndentationGuide {
         let cursor_indent_width =
             cursor_line_indent_width_from_view_lines(view_lines, cursor_line_start_byte)
                 .or_else(|| cursor_line_indent_width(state, primary_cursor_position, tab_size))?;
-        let active_indent_width = delimiter_affinity_indent_width(
+        let (active_line_idx, active_indent_width) = delimiter_affinity_indent_width(
             view_lines,
             cursor_line_idx,
             primary_cursor_position,
             cursor_indent_width,
         )
-        .unwrap_or(cursor_indent_width);
-        let column = innermost_guide_column(active_indent_width, tab_size)?;
+        .unwrap_or((cursor_line_idx, cursor_indent_width));
+        let column = parent_guide_column(view_lines, active_line_idx, active_indent_width)
+            .or_else(|| innermost_guide_column(active_indent_width, tab_size))?;
 
         let mut first_line_idx = cursor_line_idx;
         while first_line_idx > 0 {
@@ -228,22 +231,22 @@ fn delimiter_affinity_indent_width(
     cursor_line_idx: usize,
     primary_cursor_position: usize,
     cursor_indent_width: usize,
-) -> Option<usize> {
+) -> Option<(usize, usize)> {
     let cursor_line = view_lines.get(cursor_line_idx)?;
 
     if cursor_line_has_opening_delimiter_affinity(cursor_line, primary_cursor_position) {
-        if let Some(indent_width) =
-            following_deeper_indent_width(view_lines, cursor_line_idx, cursor_indent_width)
+        if let Some((line_idx, indent_width)) =
+            following_deeper_indent(view_lines, cursor_line_idx, cursor_indent_width)
         {
-            return Some(indent_width);
+            return Some((line_idx, indent_width));
         }
     }
 
     if cursor_line_has_closing_delimiter_affinity(cursor_line, primary_cursor_position) {
-        if let Some(indent_width) =
-            preceding_deeper_indent_width(view_lines, cursor_line_idx, cursor_indent_width)
+        if let Some((line_idx, indent_width)) =
+            preceding_deeper_indent(view_lines, cursor_line_idx, cursor_indent_width)
         {
-            return Some(indent_width);
+            return Some((line_idx, indent_width));
         }
     }
 
@@ -255,7 +258,7 @@ fn cursor_line_has_opening_delimiter_affinity(
     primary_cursor_position: usize,
 ) -> bool {
     line.text.chars().enumerate().any(|(idx, ch)| {
-        ch == '{'
+        is_opening_block_indicator(line, idx, ch)
             && line
                 .char_source_bytes
                 .get(idx)
@@ -263,6 +266,10 @@ fn cursor_line_has_opening_delimiter_affinity(
                 .flatten()
                 .is_some_and(|byte| primary_cursor_position >= byte)
     })
+}
+
+fn is_opening_block_indicator(line: &ViewLine, idx: usize, ch: char) -> bool {
+    matches!(ch, '{' | '(' | '[' | ':') && line.text.chars().skip(idx + 1).all(char::is_whitespace)
 }
 
 fn cursor_line_has_closing_delimiter_affinity(
@@ -278,12 +285,20 @@ fn cursor_line_has_closing_delimiter_affinity(
         let Some(byte) = line.char_source_bytes.get(idx).copied().flatten() else {
             continue;
         };
+        let close_end = byte + ch.len_utf8();
+
+        if line
+            .source_start_byte
+            .is_some_and(|start| primary_cursor_position >= start && primary_cursor_position < byte)
+            && line.text.chars().take(idx).all(char::is_whitespace)
+        {
+            return true;
+        }
 
         if primary_cursor_position == byte {
             return true;
         }
 
-        let close_end = byte + ch.len_utf8();
         if primary_cursor_position == close_end {
             let next_is_whitespace = chars
                 .peek()
@@ -297,12 +312,12 @@ fn cursor_line_has_closing_delimiter_affinity(
     false
 }
 
-fn following_deeper_indent_width(
+fn following_deeper_indent(
     view_lines: &[ViewLine],
     cursor_line_idx: usize,
     cursor_indent_width: usize,
-) -> Option<usize> {
-    for line in view_lines.iter().skip(cursor_line_idx + 1) {
+) -> Option<(usize, usize)> {
+    for (line_idx, line) in view_lines.iter().enumerate().skip(cursor_line_idx + 1) {
         let Some(info) = source_indent_info(line) else {
             continue;
         };
@@ -310,7 +325,7 @@ fn following_deeper_indent_width(
             continue;
         }
         if info.leading_width > cursor_indent_width {
-            return Some(info.leading_width);
+            return Some((line_idx, info.leading_width));
         }
         break;
     }
@@ -318,12 +333,12 @@ fn following_deeper_indent_width(
     None
 }
 
-fn preceding_deeper_indent_width(
+fn preceding_deeper_indent(
     view_lines: &[ViewLine],
     cursor_line_idx: usize,
     cursor_indent_width: usize,
-) -> Option<usize> {
-    for line in view_lines[..cursor_line_idx].iter().rev() {
+) -> Option<(usize, usize)> {
+    for (line_idx, line) in view_lines[..cursor_line_idx].iter().enumerate().rev() {
         let Some(info) = source_indent_info(line) else {
             continue;
         };
@@ -331,7 +346,7 @@ fn preceding_deeper_indent_width(
             continue;
         }
         if info.leading_width > cursor_indent_width {
-            return Some(info.leading_width);
+            return Some((line_idx, info.leading_width));
         }
         break;
     }
@@ -341,6 +356,83 @@ fn preceding_deeper_indent_width(
 
 fn innermost_guide_column(indent_width: usize, tab_size: usize) -> Option<usize> {
     (indent_width > 0).then(|| ((indent_width - 1) / tab_size) * tab_size)
+}
+
+fn parent_guide_column(
+    view_lines: &[ViewLine],
+    line_idx: usize,
+    indent_width: usize,
+) -> Option<usize> {
+    parent_guide_columns(view_lines, line_idx, indent_width)
+        .into_iter()
+        .next()
+}
+
+fn parent_guide_columns(
+    view_lines: &[ViewLine],
+    line_idx: usize,
+    indent_width: usize,
+) -> Vec<usize> {
+    let mut columns = Vec::new();
+    let mut threshold = indent_width;
+
+    for line in view_lines[..line_idx].iter().rev() {
+        let Some(info) = source_indent_info(line) else {
+            continue;
+        };
+        if !info.has_non_whitespace || info.leading_width >= threshold {
+            continue;
+        }
+
+        columns.push(info.leading_width);
+        threshold = info.leading_width;
+        if threshold == 0 {
+            break;
+        }
+    }
+
+    if columns.last().is_some_and(|last| *last != 0) {
+        columns.push(0);
+    }
+
+    columns
+}
+
+fn fallback_guide_columns(indent_width: usize, tab_size: usize) -> Vec<usize> {
+    if indent_width == 0 {
+        return Vec::new();
+    }
+
+    let tab_size = normalized_tab_size(tab_size);
+    let mut columns = Vec::new();
+    let mut col = 0usize;
+    while col < indent_width {
+        columns.push(col);
+        col += tab_size;
+    }
+    columns
+}
+
+fn indentation_guide_columns_by_line(view_lines: &[ViewLine], tab_size: usize) -> Vec<Vec<usize>> {
+    view_lines
+        .iter()
+        .enumerate()
+        .map(|(line_idx, line)| {
+            let Some(info) = source_indent_info(line) else {
+                return Vec::new();
+            };
+            if !info.has_non_whitespace || info.leading_width == 0 {
+                return Vec::new();
+            }
+
+            let columns = parent_guide_columns(view_lines, line_idx, info.leading_width);
+            if columns.is_empty() {
+                fallback_guide_columns(info.leading_width, tab_size)
+            } else {
+                columns
+            }
+        })
+        .collect()
 }
 
 fn view_line_belongs_to_source_line(
@@ -448,6 +540,7 @@ pub(crate) fn render_view_lines(input: LineRenderInput<'_>) -> LineRenderOutput 
         show_tilde,
         highlight_current_line,
         indentation_guides,
+        indentation_guide_glyph,
         cell_theme_map,
         screen_width,
     } = input;
@@ -480,6 +573,8 @@ pub(crate) fn render_view_lines(input: LineRenderInput<'_>) -> LineRenderOutput 
         cursor_line_start_byte,
         cursor_line_end_byte,
     );
+    let indentation_guide_columns_by_line =
+        indentation_guide_columns_by_line(view_lines, state.buffer_settings.tab_size);
 
     // Cursors for O(1) amortized span lookups (spans are sorted by byte range)
     let mut span_cursors = SpanCursors::default();
@@ -697,6 +792,11 @@ pub(crate) fn render_view_lines(input: LineRenderInput<'_>) -> LineRenderOutput 
                 is_on_cursor_line,
                 highlight_current_line,
                 indentation_guides,
+                indentation_guide_glyph,
+                indentation_guide_columns: indentation_guide_columns_by_line
+                    .get(current_view_line_idx)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
                 active_indentation_guide_col: active_indentation_guide
                     .and_then(|guide| guide.column_for_line(current_view_line_idx)),
             },

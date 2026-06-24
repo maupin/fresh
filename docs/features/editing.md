@@ -22,7 +22,7 @@ Add column rulers at any position via "Add Ruler" from the command palette. Usef
 
 Show vertical indentation guides with the `editor.indentation_guides` setting. The default is `"none"`, so existing editor rendering is unchanged unless guides are enabled. Use `"all"` to draw every indentation level in leading whitespace, or `"active"` to draw only the innermost guide for the cursor's current indentation block.
 
-Guides are visual-only: they replace rendered leading whitespace cells without changing buffer text, cursor positions, byte mappings, or mouse behavior. Themes can customize the guide color with `indentation_guide_fg`; when omitted, it inherits `whitespace_indicator_fg`.
+Guides are visual-only: they replace rendered leading whitespace cells without changing buffer text, cursor positions, byte mappings, or mouse behavior. Customize the rendered glyph with `editor.indentation_guide_glyph`; the default is the left-aligned vertical guide `▏`. Use a single display-cell character. Leading/trailing whitespace is ignored, and a blank value resets to the default. Themes can customize the guide color with `indentation_guide_fg`; when omitted, it inherits `whitespace_indicator_fg`.
 
 ## Current-Line Highlight
 

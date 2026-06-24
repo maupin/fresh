@@ -1014,6 +1014,7 @@ impl SettingsState {
 
     /// Record a pending change for a setting
     pub fn set_pending_change(&mut self, path: &str, value: serde_json::Value) {
+        let value = normalize_pending_change(path, value);
         if self.value_matches_effective_original(path, &value) {
             self.pending_changes.remove(path);
         } else {
@@ -1044,6 +1045,7 @@ impl SettingsState {
         }
 
         for (path, value) in &self.pending_changes {
+            let value = normalize_pending_change(path, value.clone());
             // `pointer_mut` only succeeds when the path already exists,
             // which is the common case (most settings are statically
             // declared in the Rust Config struct). For plugin settings
@@ -1051,9 +1053,9 @@ impl SettingsState {
             // `/plugins/<name>/settings/...` — fall back to a
             // create-intermediate write so those land.
             if let Some(target) = config_value.pointer_mut(path) {
-                *target = value.clone();
+                *target = value;
             } else {
-                set_json_pointer_create(&mut config_value, path, value.clone());
+                set_json_pointer_create(&mut config_value, path, value);
             }
         }
 
@@ -3102,6 +3104,18 @@ pub(crate) fn update_control_from_value(control: &mut SettingControl, value: &se
     }
 }
 
+fn normalize_pending_change(path: &str, value: serde_json::Value) -> serde_json::Value {
+    if path == "/editor/indentation_guide_glyph" {
+        if let serde_json::Value::String(value) = value {
+            return serde_json::Value::String(crate::config::normalize_indentation_guide_glyph(
+                &value,
+            ));
+        }
+    }
+
+    value
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3169,6 +3183,44 @@ mod tests {
 
         state.discard_changes();
         assert!(!state.has_changes());
+    }
+
+    #[test]
+    fn test_indentation_guide_glyph_pending_change_is_normalized() {
+        let config = test_config();
+        let mut state = SettingsState::new(TEST_SCHEMA, &config).unwrap();
+
+        state.set_pending_change(
+            "/editor/indentation_guide_glyph",
+            serde_json::Value::String("  ┊  ".to_string()),
+        );
+        assert_eq!(
+            state.pending_changes.get("/editor/indentation_guide_glyph"),
+            Some(&serde_json::Value::String("┊".to_string()))
+        );
+
+        let config = state.apply_changes(&config).unwrap();
+        assert_eq!(config.editor.indentation_guide_glyph, "┊");
+
+        let mut state = SettingsState::new(TEST_SCHEMA, &config).unwrap();
+        state.set_pending_change(
+            "/editor/indentation_guide_glyph",
+            serde_json::Value::String("   ".to_string()),
+        );
+        assert_eq!(
+            state.pending_changes.get("/editor/indentation_guide_glyph"),
+            Some(&serde_json::Value::String("▏".to_string()))
+        );
+
+        // Backstop for text-edit paths that may already have written a raw
+        // pending value before normalization was added: apply_changes must
+        // still produce the same normalized live config that reload would.
+        state.pending_changes.insert(
+            "/editor/indentation_guide_glyph".to_string(),
+            serde_json::Value::String("  A  ".to_string()),
+        );
+        let config = state.apply_changes(&config).unwrap();
+        assert_eq!(config.editor.indentation_guide_glyph, "A");
     }
 
     #[test]

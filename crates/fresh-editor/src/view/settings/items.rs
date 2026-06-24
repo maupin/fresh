@@ -896,11 +896,13 @@ fn build_page(category: &SettingCategory, ctx: &BuildContext) -> SettingsPage {
         .collect();
 
     // Sort items: by section first (None comes last), then alphabetically by name
-    items.sort_by(|a, b| match (&a.section, &b.section) {
-        (Some(sec_a), Some(sec_b)) => sec_a.cmp(sec_b).then_with(|| a.name.cmp(&b.name)),
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => a.name.cmp(&b.name),
+    items.sort_by(|a, b| {
+        indentation_guide_items_order(a, b).unwrap_or_else(|| match (&a.section, &b.section) {
+            (Some(sec_a), Some(sec_b)) => sec_a.cmp(sec_b).then_with(|| a.name.cmp(&b.name)),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.name.cmp(&b.name),
+        })
     });
 
     // Mark items that start a new section, and capture the section list
@@ -940,6 +942,17 @@ fn build_page(category: &SettingCategory, ctx: &BuildContext) -> SettingsPage {
         items,
         subpages,
         sections,
+    }
+}
+
+fn indentation_guide_items_order(a: &SettingItem, b: &SettingItem) -> Option<std::cmp::Ordering> {
+    const MODE_PATH: &str = "/editor/indentation_guides";
+    const GLYPH_PATH: &str = "/editor/indentation_guide_glyph";
+
+    match (a.path.as_str(), b.path.as_str()) {
+        (MODE_PATH, GLYPH_PATH) => Some(std::cmp::Ordering::Less),
+        (GLYPH_PATH, MODE_PATH) => Some(std::cmp::Ordering::Greater),
+        _ => None,
     }
 }
 
@@ -1705,6 +1718,44 @@ mod tests {
         } else {
             panic!("Expected number control");
         }
+    }
+
+    #[test]
+    fn test_indentation_guide_glyph_follows_mode_in_built_page() {
+        let categories = crate::view::settings::schema::parse_schema(include_str!(
+            "../../../plugins/config-schema.json"
+        ))
+        .unwrap();
+        let config = serde_json::json!({
+            "editor": {
+                "indentation_guides": "none",
+                "indentation_guide_glyph": "▏"
+            }
+        });
+        let pages = build_pages(
+            &categories,
+            &config,
+            &HashMap::new(),
+            ConfigLayer::User,
+            &HashMap::new(),
+        );
+        let editor = pages
+            .iter()
+            .find(|page| page.path == "/editor")
+            .expect("editor page should exist");
+
+        let guide_mode_idx = editor
+            .items
+            .iter()
+            .position(|item| item.path == "/editor/indentation_guides")
+            .expect("indentation_guides item should exist");
+        let guide_glyph_idx = editor
+            .items
+            .iter()
+            .position(|item| item.path == "/editor/indentation_guide_glyph")
+            .expect("indentation_guide_glyph item should exist");
+
+        assert_eq!(guide_glyph_idx, guide_mode_idx + 1);
     }
 
     #[test]

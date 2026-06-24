@@ -60,6 +60,8 @@ pub(super) struct CellPassInput<'a> {
     pub is_on_cursor_line: bool,
     pub highlight_current_line: bool,
     pub indentation_guides: IndentationGuideMode,
+    pub indentation_guide_glyph: &'a str,
+    pub indentation_guide_columns: &'a [usize],
     /// In active mode, the one guide column to draw for this line when it is
     /// inside the active cursor's indentation block.
     pub active_indentation_guide_col: Option<usize>,
@@ -286,14 +288,25 @@ impl CellPass<'_, '_> {
         let resolved = self.resolve_cell_style(byte_pos, ansi_style, is_cursor, is_selected);
         self.record_cell_theme(&resolved);
 
-        // `indicator_buf` holds the UTF-8 bytes of a single char on the
-        // stack — no heap allocation per cell.
+        // `indicator_buf` holds the UTF-8 bytes of a single fallback indicator
+        // char on the stack — no heap allocation per cell.
         let mut indicator_buf = [0u8; 4];
         let is_lsp_cursor = is_cursor && self.input.lsp_waiting && self.input.is_active;
         let is_indentation_guide = !is_lsp_cursor && self.is_indentation_guide_cell(ch, byte_pos);
         let (display_char, is_whitespace_indicator) = if is_indentation_guide {
-            let guide_char: &str = '│'.encode_utf8(&mut indicator_buf);
-            (guide_char, false)
+            let guide_char = self
+                .input
+                .indentation_guide_glyph
+                .trim()
+                .chars()
+                .next()
+                .unwrap_or('▏');
+            let guide_glyph: &str = if char_width(guide_char) != 1 {
+                '▏'.encode_utf8(&mut indicator_buf)
+            } else {
+                guide_char.encode_utf8(&mut indicator_buf)
+            };
+            (guide_glyph, false)
         } else {
             self.display_cell_text(ch, is_cursor, is_tab_start, &mut indicator_buf)
         };
@@ -343,13 +356,10 @@ impl CellPass<'_, '_> {
 
         match self.input.indentation_guides {
             IndentationGuideMode::None => false,
-            IndentationGuideMode::All => {
-                let tab_size = match self.input.state.buffer_settings.tab_size {
-                    0 => 4,
-                    n => n,
-                };
-                self.col_offset % tab_size == 0
-            }
+            IndentationGuideMode::All => self
+                .input
+                .indentation_guide_columns
+                .contains(&self.col_offset),
             IndentationGuideMode::Active => {
                 self.input.active_indentation_guide_col == Some(self.col_offset)
             }

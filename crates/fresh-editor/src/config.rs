@@ -953,6 +953,27 @@ fn default_status_bar_separator() -> String {
     "".to_string()
 }
 
+pub fn default_indentation_guide_glyph() -> String {
+    "▏".to_string()
+}
+
+pub fn normalize_indentation_guide_glyph(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        default_indentation_guide_glyph()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn deserialize_indentation_guide_glyph<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    Ok(normalize_indentation_guide_glyph(&value))
+}
+
 impl Default for StatusBarConfig {
     fn default() -> Self {
         Self {
@@ -1188,6 +1209,18 @@ pub struct EditorConfig {
     #[serde(default)]
     #[schemars(extend("x-section" = "Display"))]
     pub indentation_guides: IndentationGuideMode,
+
+    /// Glyph used to draw indentation guides. The default is a left-aligned
+    /// vertical guide character. Leading/trailing whitespace is ignored, and
+    /// blank values reset to the default glyph. Use a single display-cell glyph
+    /// for stable layout.
+    /// Default: ▏
+    #[serde(
+        default = "default_indentation_guide_glyph",
+        deserialize_with = "deserialize_indentation_guide_glyph"
+    )]
+    #[schemars(extend("x-section" = "Display"))]
+    pub indentation_guide_glyph: String,
 
     // ===== Whitespace =====
     /// Master toggle for whitespace indicator visibility.
@@ -1767,6 +1800,7 @@ impl Default for EditorConfig {
             terminal_auto_title: true,
             rulers: Vec::new(),
             indentation_guides: IndentationGuideMode::None,
+            indentation_guide_glyph: default_indentation_guide_glyph(),
             whitespace_show: true,
             whitespace_spaces_leading: false,
             whitespace_spaces_inner: false,
@@ -7711,6 +7745,29 @@ mod tests {
             let cfg: Config = serde_json::from_str(&json).unwrap();
             assert_eq!(cfg.editor.indentation_guides, expected);
         }
+    }
+
+    #[test]
+    fn test_indentation_guide_glyph_defaults_and_deserializes() {
+        assert_eq!(Config::default().editor.indentation_guide_glyph, "▏");
+
+        let cfg: Config = serde_json::from_str(
+            r#"{"editor":{"indentation_guides":"all","indentation_guide_glyph":"┊"}}"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.editor.indentation_guides, IndentationGuideMode::All);
+        assert_eq!(cfg.editor.indentation_guide_glyph, "┊");
+    }
+
+    #[test]
+    fn test_indentation_guide_glyph_normalizes_whitespace_and_blank_values() {
+        let cfg: Config =
+            serde_json::from_str(r#"{"editor":{"indentation_guide_glyph":"  ┊  "}}"#).unwrap();
+        assert_eq!(cfg.editor.indentation_guide_glyph, "┊");
+
+        let cfg: Config =
+            serde_json::from_str(r#"{"editor":{"indentation_guide_glyph":"   "}}"#).unwrap();
+        assert_eq!(cfg.editor.indentation_guide_glyph, "▏");
     }
 
     #[test]
