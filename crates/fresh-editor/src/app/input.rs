@@ -2336,7 +2336,10 @@ impl Editor {
                 {
                     // Mode change to live: remember it for the next focus.
                     let active = self.active_buffer();
-                    self.active_window_mut().terminal_mode_resume.insert(active);
+                    self.active_window_mut().set_terminal_interaction_mode(
+                        active,
+                        crate::app::window::TerminalInteractionMode::Live,
+                    );
                     self.active_window_mut().terminal_mode = true;
                     self.active_window_mut().key_context = KeyContext::Terminal;
                     self.set_status_message(t!("status.terminal_mode_enabled").to_string());
@@ -2347,9 +2350,10 @@ impl Editor {
                 if self.active_window().terminal_mode {
                     // User dropped to read-only scrollback: remember that mode.
                     let active = self.active_buffer();
-                    self.active_window_mut()
-                        .terminal_mode_resume
-                        .remove(&active);
+                    self.active_window_mut().set_terminal_interaction_mode(
+                        active,
+                        crate::app::window::TerminalInteractionMode::Scrollback,
+                    );
                     self.active_window_mut().terminal_mode = false;
                     self.active_window_mut().key_context = KeyContext::Normal;
                     self.set_status_message(t!("status.terminal_mode_disabled").to_string());
@@ -3093,11 +3097,9 @@ impl Editor {
             .expect("active window must have a populated split layout")
             .set_active_split(new_leaf);
 
-        // Mirror open_terminal's post-attach bookkeeping. A freshly opened
-        // terminal starts live (its remembered mode).
-        self.active_window_mut()
-            .terminal_mode_resume
-            .insert(buffer_id);
+        // Mirror open_terminal's post-attach bookkeeping. The buffer was
+        // created via `create_terminal_buffer_detached`, so its remembered
+        // mode is already Live.
         self.active_window_mut().terminal_mode = true;
         self.active_window_mut().key_context = crate::input::keybindings::KeyContext::Terminal;
         self.active_window_mut().resize_visible_terminals();
