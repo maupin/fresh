@@ -79,7 +79,7 @@
         "terminal_auto_title": true,
         "cursor_style": "default",
         "rulers": [],
-        "indentation_guides": "none",
+        "indentation_guide": "none",
         "indentation_guide_glyph": "▏",
         "whitespace_show": true,
         "whitespace_spaces_leading": false,
@@ -581,7 +581,7 @@
           "default": [],
           "x-section": "Display"
         },
-        "indentation_guides": {
+        "indentation_guide": {
           "description": "Vertical indentation guide rendering mode.\nGuides are drawn at indentation levels derived from the active buffer's\ntab size. They replace existing leading whitespace cells visually only;\nbuffer text, cursor positions, and mouse mappings are unchanged.\nModes:\n- `none`: disable indentation guides.\n- `all`: draw every indentation level in leading whitespace.\n- `active`: draw only the innermost guide for the cursor's current\n  indentation block.\nDefault: none",
           "$ref": "#/$defs/IndentationGuideMode",
           "default": "none",

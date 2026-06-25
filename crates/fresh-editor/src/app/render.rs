@@ -719,7 +719,7 @@ impl Editor {
                     self.config.editor.diagnostics_inline_text,
                     self.config.editor.show_tilde,
                     self.config.editor.highlight_current_column,
-                    self.config.editor.indentation_guides,
+                    self.config.editor.indentation_guide,
                     &self.config.editor.indentation_guide_glyph,
                     self.config.editor.hide_current_line_on_selection,
                     __cell_theme_map_mut,
@@ -2356,7 +2356,7 @@ impl Editor {
                     self.config.editor.diagnostics_inline_text,
                     false, // hide tilde markers in the preview
                     self.config.editor.highlight_current_column,
-                    self.config.editor.indentation_guides,
+                    self.config.editor.indentation_guide,
                     &self.config.editor.indentation_guide_glyph,
                     self.config.editor.hide_current_line_on_selection,
                     &mut scratch_cell_theme_map,
@@ -3382,7 +3382,7 @@ impl Editor {
                 let diagnostics_inline_text = self.config.editor.diagnostics_inline_text;
                 let show_tilde = false; // preview hides tilde markers
                 let highlight_current_column = self.config.editor.highlight_current_column;
-                let indentation_guides = self.config.editor.indentation_guides;
+                let indentation_guide = self.config.editor.indentation_guide;
                 let indentation_guide_glyph = self.config.editor.indentation_guide_glyph.clone();
                 let screen_width = frame.area().width;
 
@@ -3454,7 +3454,7 @@ impl Editor {
                         diagnostics_inline_text,
                         show_tilde,
                         highlight_current_column,
-                        indentation_guides,
+                        indentation_guide,
                         &indentation_guide_glyph,
                         cell_theme_map,
                         screen_width,

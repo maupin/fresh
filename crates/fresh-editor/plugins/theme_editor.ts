@@ -249,25 +249,6 @@ function fieldRefersToColorDef(fieldObj: Record<string, unknown>): boolean {
   return false;
 }
 
-function humanizeSchemaName(name: string): string {
-  return name
-    .split("_")
-    .filter(part => part.length > 0)
-    .map(part => {
-      if (part === "fg") return "Foreground";
-      if (part === "bg") return "Background";
-      if (part === "ui") return "UI";
-      if (part === "lsp") return "LSP";
-      return part.charAt(0).toUpperCase() + part.slice(1);
-    })
-    .join(" ");
-}
-
-function translateOrFallback(key: string, fallback: string): string {
-  const translated = editor.t(key);
-  return translated && translated !== key ? translated : fallback;
-}
-
 /**
  * Load theme sections from the Rust API.
  * Parses the raw JSON Schema and resolves $ref references.
@@ -338,8 +319,8 @@ function loadThemeSections(): ThemeSection[] {
 
       fields.push({
         key: fieldName,
-        displayName: translateOrFallback(i18nName, humanizeSchemaName(fieldName)),
-        description: translateOrFallback(i18nDesc, fieldDesc),
+        displayName: editor.t(i18nName) || fieldDesc || fieldName,
+        description: editor.t(i18nDesc) || fieldDesc,
         section: sectionName,
       });
     }
@@ -353,8 +334,8 @@ function loadThemeSections(): ThemeSection[] {
 
     sections.push({
       name: sectionName,
-      displayName: translateOrFallback(sectionI18nName, humanizeSchemaName(sectionName)),
-      description: translateOrFallback(sectionI18nDesc, sectionDesc),
+      displayName: editor.t(sectionI18nName) || sectionDesc || sectionName,
+      description: editor.t(sectionI18nDesc) || sectionDesc,
       fields,
     });
   }

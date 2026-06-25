@@ -93,7 +93,7 @@ impl SplitRenderer {
         diagnostics_inline_text: bool,
         show_tilde: bool,
         highlight_current_column: bool,
-        indentation_guides: IndentationGuideMode,
+        indentation_guide: IndentationGuideMode,
         indentation_guide_glyph: &str,
         hide_current_line_on_selection: bool,
         cell_theme_map: &mut Vec<crate::app::types::CellThemeInfo>,
@@ -153,7 +153,7 @@ impl SplitRenderer {
             diagnostics_inline_text,
             show_tilde,
             highlight_current_column,
-            indentation_guides,
+            indentation_guide,
             indentation_guide_glyph,
             hide_current_line_on_selection,
             cell_theme_map,
@@ -242,7 +242,7 @@ impl SplitRenderer {
         diagnostics_inline_text: bool,
         show_tilde: bool,
         highlight_current_column: bool,
-        indentation_guides: IndentationGuideMode,
+        indentation_guide: IndentationGuideMode,
         indentation_guide_glyph: &str,
         cell_theme_map: &mut Vec<crate::app::types::CellThemeInfo>,
         screen_width: u16,
@@ -287,7 +287,7 @@ impl SplitRenderer {
             diagnostics_inline_text,
             show_tilde,
             highlight_current_column,
-            indentation_guides,
+            indentation_guide,
             indentation_guide_glyph,
             cell_theme_map,
             screen_width,
@@ -371,7 +371,7 @@ mod tests {
         )
     }
 
-    fn render_output_for_with_indentation_guides(
+    fn render_output_for_with_indentation_guide(
         content: &str,
         cursor_pos: usize,
         left_column: usize,
@@ -388,13 +388,13 @@ mod tests {
         content: &str,
         cursor_pos: usize,
         left_column: usize,
-        indentation_guides: IndentationGuideMode,
+        indentation_guide: IndentationGuideMode,
     ) -> (LineRenderOutput, usize, bool, usize) {
         render_output_for_with_options(
             content,
             cursor_pos,
             false,
-            indentation_guides,
+            indentation_guide,
             crate::config::default_indentation_guide_glyph(),
             left_column,
             None,
@@ -405,14 +405,14 @@ mod tests {
         content: &str,
         cursor_pos: usize,
         left_column: usize,
-        indentation_guides: IndentationGuideMode,
+        indentation_guide: IndentationGuideMode,
         tab_size: usize,
     ) -> (LineRenderOutput, usize, bool, usize) {
         render_output_for_with_options(
             content,
             cursor_pos,
             false,
-            indentation_guides,
+            indentation_guide,
             crate::config::default_indentation_guide_glyph(),
             left_column,
             Some(tab_size),
@@ -423,7 +423,7 @@ mod tests {
         content: &str,
         cursor_pos: usize,
         gutters_enabled: bool,
-        indentation_guides: IndentationGuideMode,
+        indentation_guide: IndentationGuideMode,
         indentation_guide_glyph: String,
         left_column: usize,
         tab_size: Option<usize>,
@@ -513,7 +513,7 @@ mod tests {
             byte_offset_mode: false, // Tests use exact line numbers
             show_tilde: true,
             highlight_current_line: true,
-            indentation_guides,
+            indentation_guide,
             indentation_guide_glyph: &indentation_guide_glyph,
             cell_theme_map: &mut dummy_theme_map,
             screen_width: 0,
@@ -538,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_disabled_preserves_leading_spaces() {
+    fn indentation_guide_disabled_preserves_leading_spaces() {
         let (output, _, _, _) = render_output_for("    let x = 1;\n", 0);
 
         assert_eq!(rendered_line_text(&output, 0), "    let x = 1;");
@@ -546,8 +546,8 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_render_for_space_indents_but_not_root_lines() {
-        let (output, _, _, _) = render_output_for_with_indentation_guides(
+    fn indentation_guide_render_for_space_indents_but_not_root_lines() {
+        let (output, _, _, _) = render_output_for_with_indentation_guide(
             "fn main()\n    let child = 1;\n        let grandchild = 2;\nroot\n",
             0,
             0,
@@ -563,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_follow_four_space_file_indents_when_tab_size_is_two() {
+    fn indentation_guide_follow_four_space_file_indents_when_tab_size_is_two() {
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode_and_tab_size(
             "fn main() {\n    child();\n        grandchild();\n}\n",
             0,
@@ -579,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_active_mode_uses_file_indent_width_when_tab_size_is_two() {
+    fn indentation_guide_active_mode_uses_file_indent_width_when_tab_size_is_two() {
         let content = "function test() {\n    if (1) {\n        // test\n    }\n}\n";
         let cursor_pos = content.find("// test").unwrap();
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode_and_tab_size(
@@ -597,7 +597,7 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_follow_nearest_earlier_parent_indent_when_widths_vary() {
+    fn indentation_guide_follow_nearest_earlier_parent_indent_when_widths_vary() {
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode_and_tab_size(
             "root\n  child\n      grand\n  sibling\n",
             0,
@@ -613,7 +613,7 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_active_mode_uses_nearest_earlier_parent_indent() {
+    fn indentation_guide_active_mode_uses_nearest_earlier_parent_indent() {
         let content = "root\n  child\n      grand\n  sibling\n";
         let cursor_pos = content.find("grand").unwrap();
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode_and_tab_size(
@@ -631,8 +631,8 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_resume_after_lower_indent_line() {
-        let (output, _, _, _) = render_output_for_with_indentation_guides(
+    fn indentation_guide_resume_after_lower_indent_line() {
+        let (output, _, _, _) = render_output_for_with_indentation_guide(
             "        before\n    lower\n        after\n",
             0,
             0,
@@ -644,23 +644,37 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_render_for_tabs() {
+    fn indentation_guide_all_mode_draws_through_blank_lines() {
+        // A whitespace-only line inside a block continues the enclosing block's
+        // guides rather than leaving a one-row gap (the blank line here has
+        // four trailing spaces, so its column-0 guide cell is present).
         let (output, _, _, _) =
-            render_output_for_with_indentation_guides("\tchild\n\t\tgrand\n", 0, 0);
+            render_output_for_with_indentation_guide("fn main()\n    a\n    \n    b\n", 0, 0);
+
+        assert_eq!(rendered_line_text(&output, 0), "fn main()");
+        assert_eq!(rendered_line_text(&output, 1), "▏   a");
+        assert_eq!(rendered_line_text(&output, 2), "▏");
+        assert_eq!(rendered_line_text(&output, 3), "▏   b");
+    }
+
+    #[test]
+    fn indentation_guide_render_for_tabs() {
+        let (output, _, _, _) =
+            render_output_for_with_indentation_guide("\tchild\n\t\tgrand\n", 0, 0);
 
         assert_eq!(rendered_line_text(&output, 0), "▏   child");
         assert_eq!(rendered_line_text(&output, 1), "▏   ▏   grand");
     }
 
     #[test]
-    fn indentation_guides_respect_horizontal_scroll() {
-        let (output, _, _, _) = render_output_for_with_indentation_guides("        grand\n", 0, 4);
+    fn indentation_guide_respect_horizontal_scroll() {
+        let (output, _, _, _) = render_output_for_with_indentation_guide("        grand\n", 0, 4);
 
         assert_eq!(rendered_line_text(&output, 0), "▏   grand");
     }
 
     #[test]
-    fn indentation_guides_use_configured_glyph() {
+    fn indentation_guide_use_configured_glyph() {
         let (output, _, _, _) = render_output_for_with_options(
             "        grand\n",
             0,
@@ -675,7 +689,7 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_renderer_normalizes_blank_and_padded_glyphs() {
+    fn indentation_guide_renderer_normalizes_blank_and_padded_glyphs() {
         let (output, _, _, _) = render_output_for_with_options(
             "    child\n",
             0,
@@ -700,7 +714,7 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_renderer_uses_one_character_from_glyph_setting() {
+    fn indentation_guide_renderer_uses_one_character_from_glyph_setting() {
         let (output, _, _, _) = render_output_for_with_options(
             "    child\n",
             0,
@@ -715,7 +729,7 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_renderer_rejects_double_width_glyphs() {
+    fn indentation_guide_renderer_rejects_double_width_glyphs() {
         let (output, _, _, _) = render_output_for_with_options(
             "    child\n",
             0,
@@ -730,7 +744,7 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_active_mode_renders_only_innermost_active_block() {
+    fn indentation_guide_active_mode_renders_only_innermost_active_block() {
         let content = "    if ready {\n        inner\n        sibling\n    }\n";
         let cursor_pos = content.find("inner").unwrap();
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
@@ -747,34 +761,34 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_active_mode_updates_when_cursor_changes_blocks() {
-        let content = "    first\n        nested\n    second\n";
+    fn indentation_guide_active_mode_updates_when_cursor_changes_blocks() {
+        // Two sibling blocks: the active guide follows whichever block encloses
+        // the cursor.
+        let content = "    a\n        x\n    b\n        y\n";
 
-        let outer_cursor = content.find("first").unwrap();
-        let (outer_output, _, _, _) = render_output_for_with_indentation_guide_mode(
+        let first_cursor = content.find('x').unwrap();
+        let (first_output, _, _, _) = render_output_for_with_indentation_guide_mode(
             content,
-            outer_cursor,
+            first_cursor,
             0,
             IndentationGuideMode::Active,
         );
-        assert_eq!(rendered_line_text(&outer_output, 0), "▏   first");
-        assert_eq!(rendered_line_text(&outer_output, 1), "▏       nested");
-        assert_eq!(rendered_line_text(&outer_output, 2), "▏   second");
+        assert_eq!(rendered_line_text(&first_output, 1), "    ▏   x");
+        assert_eq!(rendered_line_text(&first_output, 3), "        y");
 
-        let nested_cursor = content.find("nested").unwrap();
-        let (nested_output, _, _, _) = render_output_for_with_indentation_guide_mode(
+        let second_cursor = content.find('y').unwrap();
+        let (second_output, _, _, _) = render_output_for_with_indentation_guide_mode(
             content,
-            nested_cursor,
+            second_cursor,
             0,
             IndentationGuideMode::Active,
         );
-        assert_eq!(rendered_line_text(&nested_output, 0), "    first");
-        assert_eq!(rendered_line_text(&nested_output, 1), "    ▏   nested");
-        assert_eq!(rendered_line_text(&nested_output, 2), "    second");
+        assert_eq!(rendered_line_text(&second_output, 1), "        x");
+        assert_eq!(rendered_line_text(&second_output, 3), "    ▏   y");
     }
 
     #[test]
-    fn indentation_guides_active_mode_supports_tabs() {
+    fn indentation_guide_active_mode_supports_tabs() {
         let content = "\tchild\n\t\tgrand\n";
         let cursor_pos = content.find("grand").unwrap();
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
@@ -791,7 +805,11 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_active_mode_opening_delimiter_prefers_child_block() {
+    fn indentation_guide_active_mode_cursor_on_block_header_uses_child_block() {
+        // The cursor's line heads a more-indented block, so the active guide is
+        // the child block's guide (one level in), not the header's own level.
+        // Block detection is purely indentation-based, so this holds regardless
+        // of the trailing delimiter (`{`, `(`, `[`, `:`, …).
         let content = "    if (1) {\n        // test\n    }\n";
         let cursor_pos = content.find('{').unwrap();
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
@@ -807,71 +825,9 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_active_mode_opening_paren_prefers_child_block() {
-        let content = "    call(\n        arg\n    )\n";
-        let cursor_pos = content.find('(').unwrap();
-        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
-            content,
-            cursor_pos,
-            0,
-            IndentationGuideMode::Active,
-        );
-
-        assert_eq!(rendered_line_text(&output, 0), "    call(");
-        assert_eq!(rendered_line_text(&output, 1), "    ▏   arg");
-        assert_eq!(rendered_line_text(&output, 2), "    )");
-    }
-
-    #[test]
-    fn indentation_guides_active_mode_opening_bracket_prefers_child_block() {
-        let content = "    items = [\n        one\n    ]\n";
-        let cursor_pos = content.find('[').unwrap();
-        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
-            content,
-            cursor_pos,
-            0,
-            IndentationGuideMode::Active,
-        );
-
-        assert_eq!(rendered_line_text(&output, 0), "    items = [");
-        assert_eq!(rendered_line_text(&output, 1), "    ▏   one");
-        assert_eq!(rendered_line_text(&output, 2), "    ]");
-    }
-
-    #[test]
-    fn indentation_guides_active_mode_trailing_colon_prefers_child_block() {
-        let content = "    if ready:\n        run()\n";
-        let cursor_pos = content.find(':').unwrap();
-        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
-            content,
-            cursor_pos,
-            0,
-            IndentationGuideMode::Active,
-        );
-
-        assert_eq!(rendered_line_text(&output, 0), "    if ready:");
-        assert_eq!(rendered_line_text(&output, 1), "    ▏   run()");
-    }
-
-    #[test]
-    fn indentation_guides_active_mode_non_trailing_colon_uses_current_block() {
-        let content = "    key: value\n        child\n";
-        let cursor_pos = content.find(':').unwrap();
-        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
-            content,
-            cursor_pos,
-            0,
-            IndentationGuideMode::Active,
-        );
-
-        assert_eq!(rendered_line_text(&output, 0), "▏   key: value");
-        assert_eq!(rendered_line_text(&output, 1), "▏       child");
-    }
-
-    #[test]
-    fn indentation_guides_active_mode_at_newline_after_opening_delimiter_prefers_child_block() {
+    fn indentation_guide_active_mode_cursor_in_body_uses_enclosing_block() {
         let content = "    if (1) {\n        // test\n    }\n";
-        let cursor_pos = content.find('\n').unwrap();
+        let cursor_pos = content.find("// test").unwrap();
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
             content,
             cursor_pos,
@@ -885,23 +841,9 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_active_mode_before_opening_delimiter_uses_current_block() {
-        let content = "    if (1) {\n        // test\n    }\n";
-        let cursor_pos = content.find('{').unwrap() - 1;
-        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
-            content,
-            cursor_pos,
-            0,
-            IndentationGuideMode::Active,
-        );
-
-        assert_eq!(rendered_line_text(&output, 0), "▏   if (1) {");
-        assert_eq!(rendered_line_text(&output, 1), "▏       // test");
-        assert_eq!(rendered_line_text(&output, 2), "▏   }");
-    }
-
-    #[test]
-    fn indentation_guides_active_mode_closing_delimiter_prefers_closed_block() {
+    fn indentation_guide_active_mode_dedent_line_with_no_parent_has_no_guide() {
+        // The cursor sits on a dedent line (`}`) at the outermost indent here,
+        // so it belongs to no enclosing block and draws no guide.
         let content = "    if (1) {\n        // test\n    }\n";
         let cursor_pos = content.find("    }").unwrap() + 4;
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
@@ -912,14 +854,16 @@ mod tests {
         );
 
         assert_eq!(rendered_line_text(&output, 0), "    if (1) {");
-        assert_eq!(rendered_line_text(&output, 1), "    ▏   // test");
+        assert_eq!(rendered_line_text(&output, 1), "        // test");
         assert_eq!(rendered_line_text(&output, 2), "    }");
     }
 
     #[test]
-    fn indentation_guides_active_mode_before_closing_delimiter_prefers_closed_block() {
-        let content = "    if (1) {\n        // test\n    }\n";
-        let cursor_pos = content.find("    }").unwrap() + 2;
+    fn indentation_guide_active_mode_dedent_line_uses_enclosing_block_when_nested() {
+        // A dedent line that still sits inside an outer block draws that outer
+        // block's guide.
+        let content = "fn () {\n    if (1) {\n        // test\n    }\n}\n";
+        let cursor_pos = content.find("    }").unwrap() + 4;
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
             content,
             cursor_pos,
@@ -927,32 +871,20 @@ mod tests {
             IndentationGuideMode::Active,
         );
 
-        assert_eq!(rendered_line_text(&output, 0), "    if (1) {");
-        assert_eq!(rendered_line_text(&output, 1), "    ▏   // test");
-        assert_eq!(rendered_line_text(&output, 2), "    }");
+        // Viewport is 4 rows tall in this harness, so the trailing `}` (line 4)
+        // is off-screen; the dedent line `}` (line 3) carries the outer guide.
+        assert_eq!(rendered_line_text(&output, 0), "fn () {");
+        assert_eq!(rendered_line_text(&output, 1), "▏   if (1) {");
+        assert_eq!(rendered_line_text(&output, 2), "▏       // test");
+        assert_eq!(rendered_line_text(&output, 3), "▏   }");
     }
 
     #[test]
-    fn indentation_guides_active_mode_after_closing_delimiter_prefers_closed_block() {
-        let content = "    if (1) {\n        // test\n    }\n";
-        let cursor_pos = content.find("    }").unwrap() + 5;
-        let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
-            content,
-            cursor_pos,
-            0,
-            IndentationGuideMode::Active,
-        );
-
-        assert_eq!(rendered_line_text(&output, 0), "    if (1) {");
-        assert_eq!(rendered_line_text(&output, 1), "    ▏   // test");
-        assert_eq!(rendered_line_text(&output, 2), "    }");
-    }
-
-    #[test]
-    fn indentation_guides_all_mode_ignores_delimiter_affinity() {
+    fn indentation_guide_all_mode_is_cursor_independent() {
+        // `all` mode draws every level regardless of cursor position.
         let content = "    if (1) {\n        // test\n    }\n";
         let cursor_pos = content.find('{').unwrap() + 1;
-        let (output, _, _, _) = render_output_for_with_indentation_guides(content, cursor_pos, 0);
+        let (output, _, _, _) = render_output_for_with_indentation_guide(content, cursor_pos, 0);
 
         assert_eq!(rendered_line_text(&output, 0), "▏   if (1) {");
         assert_eq!(rendered_line_text(&output, 1), "▏   ▏   // test");
@@ -960,7 +892,9 @@ mod tests {
     }
 
     #[test]
-    fn indentation_guides_active_mode_skips_root_cursor_line() {
+    fn indentation_guide_active_mode_root_header_draws_column_zero_guide() {
+        // A cursor on a root-level header still gets the child block's guide,
+        // which lands at column 0 — consistent with `all` mode.
         let (output, _, _, _) = render_output_for_with_indentation_guide_mode(
             "root\n    child\n",
             0,
@@ -969,7 +903,7 @@ mod tests {
         );
 
         assert_eq!(rendered_line_text(&output, 0), "root");
-        assert_eq!(rendered_line_text(&output, 1), "    child");
+        assert_eq!(rendered_line_text(&output, 1), "▏   child");
     }
 
     #[test]
@@ -2886,7 +2820,7 @@ mod tests {
             byte_offset_mode: false,
             show_tilde: true,
             highlight_current_line,
-            indentation_guides: IndentationGuideMode::None,
+            indentation_guide: IndentationGuideMode::None,
             indentation_guide_glyph: "▏",
             cell_theme_map: &mut Vec::new(),
             screen_width: 0,

@@ -436,7 +436,9 @@ pub mod indent_folding {
     }
 
     /// Measure leading indent of a line given as a byte slice (no trailing `\n`).
-    fn slice_indent(line: &[u8], tab_size: usize) -> (usize, bool) {
+    /// Returns `(indent_width, all_blank)` where `all_blank` is true when the
+    /// line has no non-whitespace character. Tabs expand against `tab_size`.
+    pub fn slice_indent(line: &[u8], tab_size: usize) -> (usize, bool) {
         let mut indent = 0;
         let mut all_blank = true;
         for &b in line {

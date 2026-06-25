@@ -498,30 +498,14 @@ fn parse_properties(
 
     // Sort settings: by x-order (if set) first, then alphabetically by name.
     // Settings with x-order come before those without.
-    settings.sort_by(|a, b| {
-        indentation_guide_settings_order(a, b).unwrap_or_else(|| match (a.order, b.order) {
-            (Some(a_ord), Some(b_ord)) => a_ord.cmp(&b_ord).then_with(|| a.name.cmp(&b.name)),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => a.name.cmp(&b.name),
-        })
+    settings.sort_by(|a, b| match (a.order, b.order) {
+        (Some(a_ord), Some(b_ord)) => a_ord.cmp(&b_ord).then_with(|| a.name.cmp(&b.name)),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => a.name.cmp(&b.name),
     });
 
     settings
-}
-
-fn indentation_guide_settings_order(
-    a: &SettingSchema,
-    b: &SettingSchema,
-) -> Option<std::cmp::Ordering> {
-    const MODE_PATH: &str = "/editor/indentation_guides";
-    const GLYPH_PATH: &str = "/editor/indentation_guide_glyph";
-
-    match (a.path.as_str(), b.path.as_str()) {
-        (MODE_PATH, GLYPH_PATH) => Some(std::cmp::Ordering::Less),
-        (GLYPH_PATH, MODE_PATH) => Some(std::cmp::Ordering::Greater),
-        _ => None,
-    }
 }
 
 /// Parse a single setting from its schema
@@ -979,51 +963,29 @@ mod tests {
     }
 
     #[test]
-    fn test_indentation_guides_generated_schema_renders_as_enum() {
+    fn test_indentation_guide_generated_schema_renders_as_enum() {
         let categories = parse_schema(include_str!("../../../plugins/config-schema.json")).unwrap();
         let editor = categories
             .iter()
             .find(|c| c.path == "/editor")
             .expect("editor category should exist");
-        let indentation_guides = editor
+        let indentation_guide = editor
             .settings
             .iter()
-            .find(|s| s.path == "/editor/indentation_guides")
-            .expect("indentation_guides setting should exist");
+            .find(|s| s.path == "/editor/indentation_guide")
+            .expect("indentation_guide setting should exist");
 
-        match &indentation_guides.setting_type {
+        match &indentation_guide.setting_type {
             SettingType::Enum { options } => {
                 let values: Vec<&str> =
                     options.iter().map(|option| option.value.as_str()).collect();
                 assert_eq!(values, vec!["none", "all", "active"]);
             }
             other => panic!(
-                "expected indentation_guides to render as enum, got {:?}",
+                "expected indentation_guide to render as enum, got {:?}",
                 other
             ),
         }
-    }
-
-    #[test]
-    fn test_indentation_guide_glyph_follows_mode_setting() {
-        let categories = parse_schema(include_str!("../../../plugins/config-schema.json")).unwrap();
-        let editor = categories
-            .iter()
-            .find(|c| c.path == "/editor")
-            .expect("editor category should exist");
-
-        let guide_mode_idx = editor
-            .settings
-            .iter()
-            .position(|s| s.path == "/editor/indentation_guides")
-            .expect("indentation_guides setting should exist");
-        let guide_glyph_idx = editor
-            .settings
-            .iter()
-            .position(|s| s.path == "/editor/indentation_guide_glyph")
-            .expect("indentation_guide_glyph setting should exist");
-
-        assert_eq!(guide_glyph_idx, guide_mode_idx + 1);
     }
 
     #[test]

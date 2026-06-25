@@ -48,7 +48,7 @@ pub mod gui;
 pub mod hot_exit_flows;
 pub mod hot_exit_recovery_lsp_sync;
 pub mod indent_dedent;
-pub mod indentation_guides;
+pub mod indentation_guide;
 pub mod inlay_hints_wrap_scroll;
 pub mod inline_diagnostics;
 pub mod issue_1288_word_select_whitespace;

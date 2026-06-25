@@ -1208,7 +1208,7 @@ pub struct EditorConfig {
     /// Default: none
     #[serde(default)]
     #[schemars(extend("x-section" = "Display"))]
-    pub indentation_guides: IndentationGuideMode,
+    pub indentation_guide: IndentationGuideMode,
 
     /// Glyph used to draw indentation guides. The default is a left-aligned
     /// vertical guide character. Leading/trailing whitespace is ignored, and
@@ -1799,7 +1799,7 @@ impl Default for EditorConfig {
             set_window_title: true,
             terminal_auto_title: true,
             rulers: Vec::new(),
-            indentation_guides: IndentationGuideMode::None,
+            indentation_guide: IndentationGuideMode::None,
             indentation_guide_glyph: default_indentation_guide_glyph(),
             whitespace_show: true,
             whitespace_spaces_leading: false,
@@ -7727,10 +7727,10 @@ mod tests {
     #[test]
     fn test_indentation_guide_mode_rejects_booleans() {
         assert!(
-            serde_json::from_str::<Config>(r#"{"editor":{"indentation_guides":false}}"#).is_err()
+            serde_json::from_str::<Config>(r#"{"editor":{"indentation_guide":false}}"#).is_err()
         );
         assert!(
-            serde_json::from_str::<Config>(r#"{"editor":{"indentation_guides":true}}"#).is_err()
+            serde_json::from_str::<Config>(r#"{"editor":{"indentation_guide":true}}"#).is_err()
         );
     }
 
@@ -7741,9 +7741,9 @@ mod tests {
             ("all", IndentationGuideMode::All),
             ("active", IndentationGuideMode::Active),
         ] {
-            let json = format!(r#"{{"editor":{{"indentation_guides":"{}"}}}}"#, value);
+            let json = format!(r#"{{"editor":{{"indentation_guide":"{}"}}}}"#, value);
             let cfg: Config = serde_json::from_str(&json).unwrap();
-            assert_eq!(cfg.editor.indentation_guides, expected);
+            assert_eq!(cfg.editor.indentation_guide, expected);
         }
     }
 
@@ -7752,10 +7752,10 @@ mod tests {
         assert_eq!(Config::default().editor.indentation_guide_glyph, "▏");
 
         let cfg: Config = serde_json::from_str(
-            r#"{"editor":{"indentation_guides":"all","indentation_guide_glyph":"┊"}}"#,
+            r#"{"editor":{"indentation_guide":"all","indentation_guide_glyph":"┊"}}"#,
         )
         .unwrap();
-        assert_eq!(cfg.editor.indentation_guides, IndentationGuideMode::All);
+        assert_eq!(cfg.editor.indentation_guide, IndentationGuideMode::All);
         assert_eq!(cfg.editor.indentation_guide_glyph, "┊");
     }
 

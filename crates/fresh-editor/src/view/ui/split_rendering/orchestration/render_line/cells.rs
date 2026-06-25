@@ -34,7 +34,7 @@ use ratatui::text::Span;
 use std::ops::ControlFlow;
 
 /// Read-only inputs for one line's cell pass.
-pub(super) struct CellPassInput<'a> {
+pub(super) struct CellPassInput<'a, 'c> {
     pub state: &'a EditorState,
     pub theme: &'a Theme,
     pub view_line: &'a ViewLine,
@@ -59,9 +59,9 @@ pub(super) struct CellPassInput<'a> {
     pub session_mode: bool,
     pub is_on_cursor_line: bool,
     pub highlight_current_line: bool,
-    pub indentation_guides: IndentationGuideMode,
+    pub indentation_guide: IndentationGuideMode,
     pub indentation_guide_glyph: &'a str,
-    pub indentation_guide_columns: &'a [usize],
+    pub indentation_guide_columns: &'c [usize],
     /// In active mode, the one guide column to draw for this line when it is
     /// inside the active cursor's indentation block.
     pub active_indentation_guide_col: Option<usize>,
@@ -92,8 +92,8 @@ pub(super) struct CellPassOutput {
 /// debug "reveal codes", software-cursor hits, and the theme-inspector
 /// cell map.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn render_line_cells<'a>(
-    input: CellPassInput<'a>,
+pub(super) fn render_line_cells<'a, 'c>(
+    input: CellPassInput<'a, 'c>,
     selection_sweep: &mut SelectionActiveSet<'a>,
     overlay_sweep: &mut OverlayActiveSet<'a>,
     span_cursors: &mut SpanCursors,
@@ -162,8 +162,8 @@ pub(super) fn render_line_cells<'a>(
 /// Per-line state for the cell pass. One instance per view line; the
 /// `_sweep` / `span_cursors` / `cursor` borrows carry state *across*
 /// lines, everything else is reset per line.
-struct CellPass<'a, 'b> {
-    input: CellPassInput<'a>,
+struct CellPass<'a, 'b, 'c> {
+    input: CellPassInput<'a, 'c>,
     selection_sweep: &'b mut SelectionActiveSet<'a>,
     overlay_sweep: &'b mut OverlayActiveSet<'a>,
     span_cursors: &'b mut SpanCursors,
@@ -207,7 +207,7 @@ struct ResolvedCellStyle {
     syntax_category: Option<&'static str>,
 }
 
-impl CellPass<'_, '_> {
+impl CellPass<'_, '_, '_> {
     /// Process one character; `Break` when the long-line cap is reached.
     fn process_char(&mut self, ch: char) -> ControlFlow<()> {
         // Source byte for this character, via character index
@@ -332,7 +332,7 @@ impl CellPass<'_, '_> {
     /// source whitespace cells, so they preserve byte mappings and do not draw
     /// through code or synthetic/injected content.
     fn is_indentation_guide_cell(&self, ch: char, byte_pos: Option<usize>) -> bool {
-        if matches!(self.input.indentation_guides, IndentationGuideMode::None)
+        if matches!(self.input.indentation_guide, IndentationGuideMode::None)
             || ch != ' '
             || byte_pos.is_none()
         {
@@ -354,7 +354,7 @@ impl CellPass<'_, '_> {
             return false;
         }
 
-        match self.input.indentation_guides {
+        match self.input.indentation_guide {
             IndentationGuideMode::None => false,
             IndentationGuideMode::All => self
                 .input
